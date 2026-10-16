@@ -97,8 +97,13 @@
 | A5 | 模式切换可用 | **已完成（核心库）** | `0x751`/`0x7AB` 三档实测通过，见协议文档第 7 节 |
 | A6 | 功耗调优可用 | **已完成（核心库）** | Rust `PowerController`，真机写入+回滚通过 |
 | A7 | 风扇曲线可用 | 未开始 | 高风险，需先确认单体 |
-| A8 | 代码推送到 Mechrevo-Max | 未开始 | 待用户授权 push |
+| A8 | 代码推送到 Mechrevo-Max | **已完成** | `main` = `ca9b80a`，64 文件，本地/远端一致 |
 | A9 | 桌面 GUI (Tauri) | **已完成** | 真机运行验证通过，见下方截图证据 |
+| A10 | 创建发行版 (Release) | **已完成** | `v0.1.0`，含 `mechrevo-max.exe` 4.76 MB |
+| A11 | 文档补全 | **已完成** | SPEC / ARCHITECTURE / DEPLOYMENT / TROUBLESHOOTING / CONTRIBUTING / VERIFICATION-LEDGER / CHANGELOG |
+| A12 | 发布工具 | **已完成** | `tools/publish_release.py`（复用 git 凭据，上传产物） |
+| A13 | IPC 契约测试 | **已完成** | 编译期校验 5 个测试，防 Tauri v2 参数名坑 |
+| A14 | 未提交官方二进制（合规） | **已完成** | `git add --dry-run` 检查无 `.sys`/`.msix`/`.exe`/`.dll` |
 
 ### GUI 验证证据（2026-10-17）
 

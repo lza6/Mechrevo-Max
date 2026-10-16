@@ -1,0 +1,53 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.pyc
+
+# 前端 (Tauri)
+node_modules/
+dist/
+
+# Tauri 自动生成的 schema —— 每次构建都会重新生成，不入库
+app/src-tauri/gen/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# ============================================================
+# 逆向产物 —— 不分发官方二进制 / 反编译输出 (见 README 合规说明)
+# ============================================================
+reverse/disasm/
+reverse/extracted/
+*.sys
+*.msix
+*.msixbundle
+
+# 本机实测数据 (含本机特征值)
+reverse/evidence/*.json
+reverse/evidence/*.txt
+reverse/findings/
+
+# 但保留证据目录的结构说明
+!reverse/evidence/README.md
+
+# ============================================================
+# ⚠️ 绝不入库：硬件压力测试工具
+#
+# 本项目开发过程中，CPU/GPU 满载压力测试与 EC 泛洪曾导致本机
+# 发生一次"无转储硬复位"（Event 41 Kernel-Power）。
+# 详见 docs/SPEC.md 第 5.1 节与记忆 ec-flooding-hardware-hazard。
+#
+# 此类工具不入库、不分享、不复用。
+# ============================================================
+burn.cu
+*cpuload*
+*gpuload*
+*burn*.cu
+stress-cpu*

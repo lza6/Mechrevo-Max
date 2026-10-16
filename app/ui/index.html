@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>机械革命控制台 · Mechrevo-Max</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="shell">
+
+    <!-- 顶栏 -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-text">
+          <strong>机械革命控制台</strong>
+          <span class="brand-sub">Mechrevo-Max · 自研</span>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="pill" id="ec-pill" data-state="pending">
+          <span class="dot"></span>
+          <span id="ec-text">正在检测 EC…</span>
+        </div>
+        <div class="pill ghost">
+          <span class="pill-label">项目 ID</span>
+          <span class="pill-value mono" id="project-id">—</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- EC 不可用提示 -->
+    <section class="alert" id="ec-alert" hidden>
+      <div class="alert-head" id="ec-alert-title">EC 通道不可用</div>
+      <p class="alert-body" id="ec-alert-msg"></p>
+      <div id="alert-driver">
+        <p class="alert-hint">请以管理员身份打开 PowerShell 执行：</p>
+        <pre class="alert-code">sc.exe start UWACPIDriver
+pnputil.exe /scan-devices</pre>
+      </div>
+      <button class="btn" id="relaunch" hidden>以管理员身份重启</button>
+    </section>
+
+    <main class="stage" id="stage">
+
+      <!-- 左：档位 -->
+      <section class="rail" aria-labelledby="mode-heading">
+        <h2 class="rail-title" id="mode-heading">运行档位</h2>
+        <div class="mode-list" id="mode-list">
+          <button class="mode-btn" data-mode="office">
+            <span class="mode-name">办公</span>
+            <span class="mode-desc">安静 · 功耗保守</span>
+          </button>
+          <button class="mode-btn" data-mode="balance">
+            <span class="mode-name">均衡</span>
+            <span class="mode-desc">日常 · 游戏默认曲线</span>
+          </button>
+          <button class="mode-btn" data-mode="turbo">
+            <span class="mode-name">狂暴</span>
+            <span class="mode-desc">最高性能 · 风扇激进</span>
+          </button>
+        </div>
+
+        <div class="rail-foot">
+          <div class="raw-fields mono" id="mode-raw">751=— · 7AB=—</div>
+          <button class="btn subtle" id="undo-mode" disabled>撤销档位切换</button>
+        </div>
+      </section>
+
+      <!-- 右：读数 + 功耗 -->
+      <section class="stage-main">
+
+        <div class="readouts">
+          <article class="readout" id="readout-cpu">
+            <header>
+              <span class="readout-label">CPU 风扇</span>
+              <span class="readout-state" data-role="state">—</span>
+            </header>
+            <div class="readout-value">
+              <span class="num mono" data-role="value">—</span>
+              <span class="unit">RPM</span>
+            </div>
+            <div class="bar"><i data-role="bar"></i></div>
+          </article>
+
+          <article class="readout" id="readout-gpu">
+            <header>
+              <span class="readout-label">GPU 风扇</span>
+              <span class="readout-state" data-role="state">—</span>
+            </header>
+            <div class="readout-value">
+              <span class="num mono" data-role="value">—</span>
+              <span class="unit">RPM</span>
+            </div>
+            <div class="bar"><i data-role="bar"></i></div>
+          </article>
+
+          <article class="readout compact" id="readout-power">
+            <header><span class="readout-label">供电</span></header>
+            <div class="readout-value small">
+              <span class="num mono" data-role="value">—</span>
+            </div>
+            <div class="readout-note" data-role="note">—</div>
+          </article>
+        </div>
+
+        <section class="panel" aria-labelledby="power-heading">
+          <div class="panel-head">
+            <h2 id="power-heading">默认功耗墙</h2>
+            <div class="tabs" id="power-tabs">
+              <button class="tab" data-power-mode="gaming">游戏</button>
+              <button class="tab" data-power-mode="office">办公</button>
+            </div>
+          </div>
+
+          <div class="sliders" id="sliders">
+            <label class="slider-row">
+              <span class="slider-label">PL1<em>长时</em></span>
+              <input type="range" id="pl1" min="5" max="200" step="1" />
+              <output class="mono" id="pl1-out">—</output>
+            </label>
+            <label class="slider-row">
+              <span class="slider-label">PL2<em>短时</em></span>
+              <input type="range" id="pl2" min="5" max="200" step="1" />
+              <output class="mono" id="pl2-out">—</output>
+            </label>
+            <label class="slider-row">
+              <span class="slider-label">PL4<em>峰值</em></span>
+              <input type="range" id="pl4" min="0" max="255" step="1" />
+              <output class="mono" id="pl4-out">—</output>
+            </label>
+          </div>
+
+          <div class="panel-actions">
+            <span class="pending mono" id="pending">未修改</span>
+            <div class="spacer"></div>
+            <button class="btn subtle" id="reset-power">重置为读回值</button>
+            <button class="btn" id="apply-power">应用</button>
+            <button class="btn subtle" id="undo-power" disabled>撤销上次</button>
+          </div>
+        </section>
+
+      </section>
+    </main>
+
+    <!-- 底部状态 / 日志 -->
+    <footer class="statusbar">
+      <span id="status-msg">就绪</span>
+      <div class="spacer"></div>
+      <span class="mono" id="clock">—</span>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

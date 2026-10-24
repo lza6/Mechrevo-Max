@@ -43,6 +43,11 @@
       "cmd": "cd app/src-tauri && export PATH=\"/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64:$PATH\" && cargo build --release --offline",
       "exit_code": 0,
       "raw_output_tail": "   Compiling tauri-runtime-wry v2.12.2\n    Finished `release` profile [optimized] target(s) in 1m 55s\n-rwxr-xr-x 2 Administrator 197121 4992512 Oct 24 20:28 target/release/mechrevo-max.exe"
+    },
+    {
+      "cmd": "/c/Python314/python.exe -X utf8 -I tools/publish_release.py v0.1.1 --title 'v0.1.1 — 护栏补丁' --notes-file CHANGELOG.md",
+      "exit_code": 0,
+      "raw_output_tail": "凭据已就绪 (token 40 字符)\nRelease 说明: CHANGELOG.md (4299 字符)\n\n创建 Release v0.1.1 …\n✅ Release: https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.1\n\n上传 mechrevo-max.exe (4.76 MB) …\n✅ 产物已上传: https://github.com/lza6/Mechrevo-Max/releases/download/v0.1.1/mechrevo-max.exe\n   大小: 4.76 MB"
     }
   ],
   "files_changed": [
@@ -79,17 +84,72 @@
     ".agent/memory/*.md (7 个，新增)"
   ],
   "tests": [
-    { "name": "core unit tests", "type": "unit", "status": "passed", "evidence": "cargo test --offline → 44 passed" },
-    { "name": "core doctest", "type": "unit", "status": "passed", "evidence": "1 passed" },
-    { "name": "ipc command-layer unit tests", "type": "unit", "status": "passed", "evidence": "cargo test --bin mechrevo-max → 4 passed" },
-    { "name": "ipc contract tests", "type": "integration", "status": "passed", "evidence": "cargo test --test ipc_contract → 8 passed" },
-    { "name": "clippy", "type": "lint", "status": "passed", "evidence": "0 warning" },
-    { "name": "rustfmt", "type": "lint", "status": "passed", "evidence": "cargo fmt --check exit 0" },
-    { "name": "frontend syntax", "type": "lint", "status": "passed", "evidence": "node --check app/ui/app.js exit 0" },
-    { "name": "type check (含 main.rs)", "type": "build", "status": "passed", "evidence": "cargo check --all-targets exit 0" },
-    { "name": "release build", "type": "build", "status": "passed", "evidence": "mechrevo-max.exe 4992512 B" },
-    { "name": "真机硬件集成测试", "type": "integration", "status": "skipped", "evidence": "7 个 #[ignore]；按 docs/SPEC.md §5.1 与用户指示不执行" },
-    { "name": "GUI E2E", "type": "e2e", "status": "blocked", "evidence": "用户明确禁用真机 UI 自动化" }
+    {
+      "name": "core unit tests",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "cargo test --offline → 44 passed"
+    },
+    {
+      "name": "core doctest",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "1 passed"
+    },
+    {
+      "name": "ipc command-layer unit tests",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "cargo test --bin mechrevo-max → 4 passed"
+    },
+    {
+      "name": "ipc contract tests",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "cargo test --test ipc_contract → 8 passed"
+    },
+    {
+      "name": "clippy",
+      "type": "lint",
+      "status": "passed",
+      "evidence": "0 warning"
+    },
+    {
+      "name": "rustfmt",
+      "type": "lint",
+      "status": "passed",
+      "evidence": "cargo fmt --check exit 0"
+    },
+    {
+      "name": "frontend syntax",
+      "type": "lint",
+      "status": "passed",
+      "evidence": "node --check app/ui/app.js exit 0"
+    },
+    {
+      "name": "type check (含 main.rs)",
+      "type": "build",
+      "status": "passed",
+      "evidence": "cargo check --all-targets exit 0"
+    },
+    {
+      "name": "release build",
+      "type": "build",
+      "status": "passed",
+      "evidence": "mechrevo-max.exe 4992512 B"
+    },
+    {
+      "name": "真机硬件集成测试",
+      "type": "integration",
+      "status": "skipped",
+      "evidence": "7 个 #[ignore]；按 docs/SPEC.md §5.1 与用户指示不执行"
+    },
+    {
+      "name": "GUI E2E",
+      "type": "e2e",
+      "status": "blocked",
+      "evidence": "用户明确禁用真机 UI 自动化"
+    }
   ],
   "coverage_summary": {
     "lines": null,
@@ -102,7 +162,13 @@
     "EC 传输层（WindowsAcpiTransport::ioctl ↔ AccessThrottle）",
     "EC 读写在 core 内（Ec ↔ EcTransport）与 app 层（AppState.ec 锁）之间的所有权/串行化边界"
   ],
-  "mock_scenarios_covered": ["stuck_write（写了不生效）", "failing_read（读失败返回 Err 而非 0）", "panic_path（守卫回滚）", "lock_poison（锁中毒）", "concurrent_access（并发串行化）"],
+  "mock_scenarios_covered": [
+    "stuck_write（写了不生效）",
+    "failing_read（读失败返回 Err 而非 0）",
+    "panic_path（守卫回滚）",
+    "lock_poison（锁中毒）",
+    "concurrent_access（并发串行化）"
+  ],
   "browser_validation": {
     "performed": false,
     "paths": [],
@@ -118,7 +184,14 @@
     "GUI 运行时路径未在浏览器/真实窗口中验证（用户禁止真机 E2E）",
     "覆盖率无工具、无基线，故为 null",
     "跨机型行为未验证（仅 1 台机器）",
-    "MSI/NSIS 安装包未构建验证",
-    "GitHub Release 页面未能联网复核"
-  ]
+    "MSI/NSIS 安装包未构建验证"
+  ],
+  "release": {
+    "tag": "v0.1.1",
+    "url": "https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.1",
+    "asset": "mechrevo-max.exe",
+    "asset_size_bytes": 4992512,
+    "verified_via": "GitHub API releases/tags/v0.1.1（draft=false，asset 大小与本地构建逐字节一致）",
+    "verified_at": "2026-10-24T20:40:23+08:00"
+  }
 }

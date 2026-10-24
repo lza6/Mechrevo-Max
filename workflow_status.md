@@ -17,7 +17,10 @@
 | 契约测试 | 解析 `app/ui/app.js` 的 `IPC` 表双向比对 | `ipc_contract` 8 单测 |
 | 验证 | 核心 44 单测 + 1 doctest；bin 4 单测；契约 8；clippy 0 warning；fmt 干净；release exe 4 992 512 B | `evidence/v0.1.1.json` |
 
-**未执行**：真机硬件测试（安全策略）、GUI E2E（用户禁用）、覆盖率（无工具）、Release 页面复核（本机 `api.github.com` 不通）。
+**已发布**：`main` = `1fe2a14`（已推送），tag `v0.1.1` 已推送，
+[Release v0.1.1](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.1) 已创建并上传
+`mechrevo-max.exe`（4 992 512 B，API 复核 `draft=false` 且大小与本地构建一致）。
+**未执行**：真机硬件测试（安全策略）、GUI E2E（用户禁用）、覆盖率（无工具）。
 **计划文档审计**：32 个 md，0 个可删（见 `docs/计划书/闭环审计-20261024.md`）。
 
 ## ⚠️ 重大事件记录：2026-10-17 意外硬复位

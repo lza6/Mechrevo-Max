@@ -158,6 +158,8 @@ ioctl()
     <tr><td><code>cargo check --all-targets</code></td><td><span class="tag t-ok">已验证</span>通过（真正编译 <code>main.rs</code>）</td></tr>
     <tr><td><code>node --check app/ui/app.js</code></td><td><span class="tag t-ok">已验证</span>通过</td></tr>
     <tr><td><code>cargo build --release</code></td><td><span class="tag t-ok">已验证</span>1m55s，exe 4 992 512 B（4.76 MiB）<br>sha256 <code>aa4bcaaf…beae9cc9</code></td></tr>
+    <tr><td><code>git push origin main</code> + <code>git push origin v0.1.1</code></td><td><span class="tag t-ok">已验证</span>898c4c2..1fe2a14；远端 tag 已存在</td></tr>
+    <tr><td><code>tools/publish_release.py v0.1.1</code></td><td><span class="tag t-ok">已验证</span>Release 创建并上传产物；API 复核 <code>draft=false</code>，asset <strong>4 992 512 B</strong>（与本地构建一致）</td></tr>
     <tr><td>真机硬件测试（7 个 <code>#[ignore]</code>）</td><td><span class="tag t-warn">未执行</span>按 <code>docs/SPEC.md</code> §5.1 与用户指示：不做真机 E2E/压测</td></tr>
     <tr><td>GUI 真实点击路径</td><td><span class="tag t-warn">未执行</span>同上（用户明确禁用真机 UI 自动化）</td></tr>
     <tr><td>覆盖率</td><td><span class="tag t-warn">未测</span>无 <code>cargo-llvm-cov</code>，v0.2.1 补基线</td></tr>
@@ -183,7 +185,7 @@ ioctl()
   <li>温度读数仍未实现（v0.2.0；需要一次<strong>用户在场</strong>的低频只读探测）。</li>
   <li>未做 GUI 运行时验证 —— 界面改动仅通过语法检查、契约测试与静态审阅确认。</li>
   <li>覆盖率无数据；仅一台机型；MSI/NSIS 安装包从未构建验证。</li>
-  <li>GitHub Release 页面未联网复核（本机访问 <code>api.github.com</code> 无响应）。</li>
+  <li>发布已核验（<a href="https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.1">Release v0.1.1</a>，asset 4 992 512 B）。注意：该环境 <code>curl</code> 访问 <code>api.github.com</code> 返回 <code>http_code=000</code>，但 Python urllib + git 凭据正常 —— <strong>不要用 curl 判断 GitHub 可达性</strong>。</li>
 </ul>
 
 <h2>8. 测验（自测：100%，18/18 项）</h2>

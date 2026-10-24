@@ -29,7 +29,14 @@
 
 ### 未执行（及原因）
 
-真机硬件测试（安全策略）· GUI E2E（用户禁用）· 覆盖率（无工具）· GitHub Release 页面复核（本机访问 `api.github.com` 返回 `http_code=000`，网络受限）
+真机硬件测试（安全策略）· GUI E2E（用户禁用）· 覆盖率（无工具）
+
+### 发布（已完成）
+
+`git push origin main` → `898c4c2..1fe2a14`；tag `v0.1.1` 已推送；
+`tools/publish_release.py v0.1.1` 创建 Release 并上传产物；
+API 复核 `draft=false`、asset `mechrevo-max.exe` **4 992 512 B**（与本地构建一致）。
+注：`curl` 访问 `api.github.com` 返回 `http_code=000`，但 Python urllib + git 凭据可正常访问 —— 该环境的 `curl` 不可用于 GitHub API 验证。
 
 ### 计划文档审计
 

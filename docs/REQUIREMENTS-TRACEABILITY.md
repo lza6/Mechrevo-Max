@@ -20,8 +20,8 @@
 | R7 | 功耗与性能调优 | `core/src/control.rs` | **已闭环** | 真机写入 45→50→回滚→45 验证通过 | — |
 | R8 | 风扇曲线自定义 | — | **未闭环** | — | **高风险**，需单独评审 + 逐项确认后再做 |
 | R9 | 允许真实写入（已授权） | 全部写路径 | **已闭环** | 真机写入测试通过，每次均带回滚点 | — |
-| R10 | 推送到 GitHub `lza6/Mechrevo-Max` main 分支 | — | **未闭环** | 本地 git 已 init，0 提交 | 待执行（本轮） |
-| R11 | 创建发行版（Release） | — | **未闭环** | — | 待执行（本轮） |
+| R10 | 推送到 GitHub `lza6/Mechrevo-Max` main 分支 | `main` 分支 | **已闭环** | `main` 与 `origin/main` 一致；tag `v0.1.0` 本地+远端均存在 | — |
+| R11 | 创建发行版（Release） | GitHub Releases | **已闭环** | release tag `v0.1.0` + 产物 `mechrevo-max.exe` 4.76 MiB | 页面可用性需联网复核（本机离线时无法验证） |
 | R12 | 使用 Spec Kit 技能 | `docs/SPEC.md` | **部分闭环** | 已产出 SPEC.md | 需确认本地/联网获取 spec-kit 并按其规范补齐 |
 | R13 | 使用 addyosmani/agent-skills | — | **未闭环** | — | 待联网获取并应用 |
 | R14 | 自动更新 / 热更新 | — | **未闭环** | — | 调研中（`updater-researcher` 代理） |

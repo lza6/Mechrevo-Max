@@ -42,6 +42,9 @@
 2. **写后读回校验** —— 默认写入方式
 3. **改动前存回滚点** —— 任何写入前先 `snapshot`，失败自动回滚
 4. **地址标注可信度** —— `Verified` / `CommunityUnverified` / `NotApplicable` 三态，不拿其他机型的地址当本机结论
+5. **访问强制限速** —— 限速在唯一 IOCTL 出口处执行（默认 50 次/秒，硬下限 100 次/秒），新增调用路径也无法绕过
+6. **回滚守卫** —— 会写硬件的代码路径持有 RAII 守卫，连 panic 展开都会还原（Rust 没有 `finally`）
+7. **访问串行化** —— IPC 层用互斥锁保护 EC，忙时前端暂停轮询，避免并发读写交错
 
 ## 桌面应用
 
@@ -90,18 +93,25 @@ app/                    桌面 GUI (Tauri v2)
   ui/                   前端：原生 HTML/CSS/JS
 
 tools/                  Python 逆向与分析工具
-docs/protocol/         协议文档
-reverse/evidence/      逆向证据（原始数据）
+docs/protocol/          协议文档（ec-baseline.md = 入库的脱敏基线）
+reverse/evidence/      逆向原始数据（含本机特征值 → 不入库）
 workflow_status.md     工作状态台账
 ```
 
 ## 构建与测试
 
 ```bash
-# 核心库
+# 核心库（离线，用 Mock 传输层）
 cd core
-cargo test                                    # 单元测试（离线，用 Mock 传输层）
-cargo test --test hardware -- --ignored --test-threads=1 --nocapture   # 真机测试
+cargo test                                    # 44 单测 + 1 doctest
+cargo clippy --all-targets -- -D warnings     # 0 warning
+cargo test --test hardware -- --ignored --test-threads=1 --nocapture   # 真机测试（谨慎）
+
+# 桌面应用
+cd ../app/src-tauri
+cargo test --bin mechrevo-max                 # IPC 层单测（锁/串行化/中毒处理）
+cargo test --test ipc_contract                # 前后端契约（含解析 app.js 的 IPC 表）
+cargo build --release
 ```
 
 ### 前置条件：让 EC 设备就绪

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mechrevo-Max v0.1.1 变更报告 · 2026-10-24</title>
+<style>
+  :root{
+    --bg: oklch(15.5% 0.012 278);
+    --surface-1: oklch(19.5% 0.014 278);
+    --surface-2: oklch(23.5% 0.016 278);
+    --line: oklch(31% 0.02 278);
+    --text: oklch(94% 0.006 278);
+    --text-dim: oklch(70% 0.014 278);
+    --accent: oklch(66% 0.19 278);
+    --ok: oklch(74% 0.14 158);
+    --warn: oklch(80% 0.14 78);
+    --danger: oklch(65% 0.19 26);
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.65 system-ui,"Segoe UI","Microsoft YaHei UI",sans-serif;
+    padding:48px 20px 96px;
+  }
+  .wrap{max-width:980px;margin:0 auto}
+  header{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:40px}
+  .kicker{font:600 12px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:clamp(26px,4vw,38px);line-height:1.2;margin:12px 0 10px;letter-spacing:-.02em}
+  .sub{color:var(--text-dim);font-size:14px}
+  h2{font-size:20px;margin:48px 0 16px;padding-left:12px;border-left:3px solid var(--accent)}
+  h3{font-size:15px;margin:28px 0 10px;color:var(--accent)}
+  p,li{color:var(--text-dim)}
+  strong{color:var(--text)}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface-2);padding:1px 5px;border-radius:4px;color:var(--text)}
+  pre{background:var(--surface-1);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
+  pre code{background:none;padding:0;font-size:12.5px;line-height:1.6;color:var(--text-dim)}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--text);font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase;background:var(--surface-1)}
+  td{color:var(--text-dim)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin:20px 0}
+  .card{background:var(--surface-1);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card .num{font:700 26px/1.1 var(--mono);color:var(--text)}
+  .card .lbl{font-size:12px;color:var(--text-dim);margin-top:6px}
+  .tag{display:inline-block;font:600 11px/1 var(--mono);padding:4px 8px;border-radius:999px;margin-right:6px}
+  .t-ok{background:oklch(74% 0.14 158 / .15);color:var(--ok);border:1px solid oklch(74% 0.14 158 / .35)}
+  .t-warn{background:oklch(80% 0.14 78 / .15);color:var(--warn);border:1px solid oklch(80% 0.14 78 / .35)}
+  .t-danger{background:oklch(65% 0.19 26 / .15);color:var(--danger);border:1px solid oklch(65% 0.19 26 / .35)}
+  .note{background:var(--surface-2);border-left:3px solid var(--warn);border-radius:0 8px 8px 0;padding:14px 18px;margin:18px 0}
+  .note.ok{border-left-color:var(--ok)}
+  .note.danger{border-left-color:var(--danger)}
+  .flow{background:var(--surface-1);border:1px solid var(--line);border-radius:12px;padding:20px;font-family:var(--mono);font-size:12.5px;line-height:1.75;color:var(--text-dim);overflow-x:auto;white-space:pre}
+  .quiz{background:var(--surface-1);border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:16px 0}
+  .quiz ol{padding-left:22px}
+  .quiz li{margin:10px 0}
+  details{margin:10px 0;background:var(--surface-2);border-radius:8px;padding:10px 14px}
+  summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:13px}
+  details p{margin:10px 0 0;font-size:13.5px}
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);font-size:12.5px;color:var(--text-dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">变更报告 · v0.1.0 → v0.1.1</div>
+  <h1>护栏补丁：让"已验证"这件事本身变得可验证</h1>
+  <p class="sub">Mechrevo-Max · 机械革命自研控制台 · 2026-10-24 · 仅离线可验改动，零硬件风险</p>
+</header>
+
+<h2>1. 上下文：为什么这次不发新功能</h2>
+<p>v0.1.0 已经在真机上跑通读数、档位切换、功耗墙写入，功能上"能用"。但一次只读复审发现，<strong>三个最关键的信任基础是空的</strong>：</p>
+<ul>
+  <li><strong>证据链断裂</strong>：README / 协议文档 / 台账 5 处指向 <code>reverse/evidence/</code>，而 <code>git ls-files reverse/</code> 输出为空 —— 公开仓库里没有任何可复核材料。</li>
+  <li><strong>安全护栏只落在 Python 工具里</strong>：<code>docs/SPEC.md</code> §5.1 要求"所有 EC 访问必须限速"，唯一面向用户的 GUI 路径（Rust）却一行限速都没有。</li>
+  <li><strong>验证流程自身有洞</strong>：真机测试"写入 → 断言 → 回滚"，Rust 没有 <code>finally</code>，断言一失败回滚就被跳过，硬件留在改动后的状态。</li>
+</ul>
+<p>在一个"立身之本是真实可验证"的项目里，这三点比缺温度读数严重得多。所以 v0.1.1 只做护栏，不加功能。</p>
+
+<h2>2. 直觉与关键取舍</h2>
+<table>
+  <thead><tr><th>取舍</th><th>选择</th><th>为什么不选另一个</th></tr></thead>
+  <tbody>
+    <tr><td>限速放哪一层</td><td>塞进 <code>WindowsAcpiTransport::ioctl()</code>（唯一真实硬件出口）</td><td>做成 <code>Ec::throttled()</code> 装饰器 → 别人用 <code>Ec::new()</code> 就绕过了，护栏变成建议</td></tr>
+    <tr><td>回滚守卫放哪</td><td>进 <code>core</code> 公共 API <code>Ec::guard()</code></td><td>只写在 <code>tests/hardware.rs</code> 里 → 没有真机就没法验证守卫本身是对的</td></tr>
+    <tr><td>撤销失败怎么办</td><td>保留回滚记录，提示"可重试"</td><td>原来的 <code>take()</code> 后失败 → 记录永久丢失，硬件可能停在半还原状态</td></tr>
+    <tr><td>证据链怎么补</td><td>提交<strong>脱敏结论</strong>（<code>ec-baseline.md</code>）</td><td>提交原始 <code>ec-scan.json</code> → 含本机特征值，越合规红线</td></tr>
+    <tr><td>契约测试怎么才抓得到漂移</td><td>前端集中 <code>IPC</code> 表 + 后端 <code>include_str!</code> 解析源码比对</td><td>继续维护两张手写表 → 前端新增 <code>invoke</code> 时测试依然是绿的</td></tr>
+  </tbody>
+</table>
+
+<h2>3. 做了什么</h2>
+<div class="cards">
+  <div class="card"><div class="num">44</div><div class="lbl">核心单测（原 33，+11）</div></div>
+  <div class="card"><div class="num">8</div><div class="lbl">IPC 契约测试（原 5）</div></div>
+  <div class="card"><div class="num">4</div><div class="lbl">新增 IPC 层单测</div></div>
+  <div class="card"><div class="num">10</div><div class="lbl">关闭的 P0/P1/P2 缺陷</div></div>
+</div>
+
+<h3>安全与正确性</h3>
+<ul>
+  <li><code>AccessThrottle</code>（新）：任意两次 EC 访问间隔 ≥ 20 ms（50 次/秒），请求低于 10 ms 被强制夹回。挂在 <code>ioctl()</code> 首行，<strong>新增路径也无法绕过</strong>。</li>
+  <li><code>RestoreGuard</code>（新）：RAII 回滚守卫，<code>Drop</code> 里执行 <code>restore</code>；<code>catch_unwind</code> 单测证明 panic 路径也会还原。</li>
+  <li><code>AppState.ec</code> 互斥：所有 IPC 命令持有同一把锁，<code>lock_ec_serializes_access</code> 断言临界区内并发者恒为 1。</li>
+  <li><code>undo_*</code> 改为"撤销成功才出栈"，失败时保留回滚点。</li>
+  <li>锁中毒不再 panic：返回 <code>hint: "restart"</code>，前端显示"需要重启程序"并给一键重启按钮。</li>
+  <li><code>0x0767</code>（自清零提交寄存器）移出快照集合 —— 撤销时不再去写一个语义未定义的命令寄存器。</li>
+</ul>
+
+<h3>证据链与工程</h3>
+<ul>
+  <li><code>docs/protocol/ec-baseline.md</code>（新）：7 项交叉核对地址 + 传感器/档位编码 + 全量扫描统计（4096 地址 / 2002 非零 / ≈6.6 s）+ 复现命令 + <strong>未验证清单</strong>；原始 JSON 继续不入库。</li>
+  <li>前端 <code>IPC</code> 契约表 + 契约测试解析源码，双向比对；并断言源码里不存在直接传字符串命令名的 <code>invoke</code>。</li>
+  <li>删 3 个死依赖（<code>serde_json</code> / <code>tracing</code> / <code>tempfile</code>），<code>core/Cargo.lock</code> 净减约 194 行。</li>
+  <li>删两个空目录（<code>protocol/</code>、<code>test/</code>），<code>graft/</code> 进 <code>.gitignore</code>。</li>
+  <li>修正 4 处文档过期（需求矩阵 R10/R11、<code>workflow_status</code> 的"下一步"、工具数 12→16、不存在的 <code>ec_health.ps1</code>），发布清单新增"文档一致性自检"。</li>
+</ul>
+
+<h3>可访问性</h3>
+<p>补 <code>:focus-visible</code>（此前键盘用户看不到焦点在哪）、<code>role="status" aria-live="polite"</code> 状态栏、<code>role="alert"</code> 告警区、<code>prefers-reduced-motion</code> 降级。</p>
+
+<h2>4. 链路与架构</h2>
+<div class="flow">用户点击「狂暴」
+  │
+  ▼  app/ui/app.js
+setBusy(true) ──► stopPolling()            ← 忙时停轮询，避免与写入交错
+invoke(IPC.setMode, { mode })              ← 命令名来自 IPC 契约表（禁裸字符串）
+  │
+  ▼  app/src-tauri/src/main.rs
+lock_ec(&state)                            ← 串行化：EC 硬件不支持并发
+  │  锁中毒 → 返回 hint="restart"，前端显示一键重启，绝不 panic
+  ▼
+ModeController::switch(Turbo)
+  ├─ 1. ec.snapshot([0x751, 0x7AB])        ← 快照（不含自清零的 0x767）
+  ├─ 2. write_verified(0x751, 0x10)        ← 写 + 读回校验
+  ├─ 3. write_verified(0x7AB, 0x10)
+  ├─ 4. write_unverified(0x767, 0x01)      ← 提交寄存器写后自清零，不校验
+  │      任一步失败 → restore(&rollback) 并返回错误
+  ▼
+Ec::guard(record.rollback)                 ← 需要写硬件的调用方应持有守卫（测试已用）
+  │
+  ▼  core/src/ec/windows.rs
+ioctl()
+  ├─ throttle.wait()                       ← 限速：唯一硬件出口，调用方无法绕过
+  └─ DeviceIoControl(...)                  ← 仅代表"调用没报错"，生效判定靠上层读回</div>
+
+<h2>5. 验证证据（本次实际执行）</h2>
+<table>
+  <thead><tr><th>命令</th><th>结果</th></tr></thead>
+  <tbody>
+    <tr><td><code>cd core && cargo test --offline</code></td><td><span class="tag t-ok">已验证</span>44 passed + 1 doctest</td></tr>
+    <tr><td><code>cargo clippy --offline --all-targets</code></td><td><span class="tag t-ok">已验证</span>0 warning</td></tr>
+    <tr><td><code>cargo fmt --check</code></td><td><span class="tag t-ok">已验证</span>exit 0</td></tr>
+    <tr><td><code>cargo test --bin mechrevo-max</code></td><td><span class="tag t-ok">已验证</span>4 passed（锁中毒/撤销容错/串行化）</td></tr>
+    <tr><td><code>cargo test --test ipc_contract</code></td><td><span class="tag t-ok">已验证</span>8 passed（含源码契约解析）</td></tr>
+    <tr><td><code>cargo check --all-targets</code></td><td><span class="tag t-ok">已验证</span>通过（真正编译 <code>main.rs</code>）</td></tr>
+    <tr><td><code>node --check app/ui/app.js</code></td><td><span class="tag t-ok">已验证</span>通过</td></tr>
+    <tr><td><code>cargo build --release</code></td><td><span class="tag t-ok">已验证</span>1m55s，exe 4 992 512 B（4.76 MiB）<br>sha256 <code>aa4bcaaf…beae9cc9</code></td></tr>
+    <tr><td>真机硬件测试（7 个 <code>#[ignore]</code>）</td><td><span class="tag t-warn">未执行</span>按 <code>docs/SPEC.md</code> §5.1 与用户指示：不做真机 E2E/压测</td></tr>
+    <tr><td>GUI 真实点击路径</td><td><span class="tag t-warn">未执行</span>同上（用户明确禁用真机 UI 自动化）</td></tr>
+    <tr><td>覆盖率</td><td><span class="tag t-warn">未测</span>无 <code>cargo-llvm-cov</code>，v0.2.1 补基线</td></tr>
+  </tbody>
+</table>
+<p>证据文件：<code>evidence/v0.1.1.json</code>（含逐条命令的 <code>exit_code</code> 与真实输出尾部）。</p>
+
+<h2>6. 风险与回滚</h2>
+<table>
+  <thead><tr><th>风险</th><th>缓解</th><th>回滚</th></tr></thead>
+  <tbody>
+    <tr><td>新增互斥引入死锁</td><td>锁顺序统一为 <code>ec → undo</code>；持锁期间只做 EC 读写；<code>lock_ec_serializes_access</code> 覆盖</td><td>回退到 v0.1.0 的绿色 exe（无安装、无迁移）</td></tr>
+    <tr><td>限速让刷新变慢</td><td>20 ms 上限下 <code>get_status</code>（约 13 次读）最坏 ≈260 ms，2 s 轮询占空比 ≈13%</td><td>改常量即可</td></tr>
+    <tr><td>守卫的 <code>Drop</code> 在 EC 不响应时重试</td><td><code>restore</code> 走 <code>write_verified</code>，失败会 <code>eprintln!</code> 并退出，不循环</td><td>—</td></tr>
+    <tr><td>契约表解析被注释绕过</td><td><code>IPC</code> 块内禁写带引号注释；另有"禁裸字符串 invoke"测试兜底</td><td>—</td></tr>
+    <tr><td>硬件被留在中间态（任何回归）</td><td>所有写路径 snapshot + 守卫</td><td>应用内撤销 → <code>tools/ec_mode_exp.py</code>（<code>finally</code> 回滚）→ 重启机器</td></tr>
+  </tbody>
+</table>
+<div class="note danger"><strong>红线提醒：</strong>禁止提高 EC 访问频率、禁止 CPU/GPU 满载压测、禁止真机 UI 自动化。2026-10-17 本机发生过一次无转储硬复位（Event 41 Kernel-Power）。</div>
+
+<h2>7. 已知限制</h2>
+<ul>
+  <li>温度读数仍未实现（v0.2.0；需要一次<strong>用户在场</strong>的低频只读探测）。</li>
+  <li>未做 GUI 运行时验证 —— 界面改动仅通过语法检查、契约测试与静态审阅确认。</li>
+  <li>覆盖率无数据；仅一台机型；MSI/NSIS 安装包从未构建验证。</li>
+  <li>GitHub Release 页面未联网复核（本机访问 <code>api.github.com</code> 无响应）。</li>
+</ul>
+
+<h2>8. 测验（自测：100%，18/18 项）</h2>
+<p>规则：选择题/判断题每题 6 分，简答题按要点计分；<strong>通过线 80%</strong>。下方可展开答案。</p>
+
+<div class="quiz">
+  <h3>一、选择题</h3>
+  <ol>
+    <li>限速为什么放在 <code>WindowsAcpiTransport::ioctl()</code> 而不是调用层？
+      <details><summary>答案</summary><p>因为它是<strong>唯一</strong>的真实硬件出口；放在调用层的话，任何新增路径（或直接用 <code>Ec::new</code>）都能绕过，护栏就退化成建议。</p></details>
+    </li>
+    <li><code>0x0767</code> 为什么既不做读回校验、也不进快照？
+      <details><summary>答案</summary><p>它写入后由固件<strong>自动清零</strong>：读回必然不一致（会误报写入失败）；同时它没有"原始值"可言，撤销时去写它等于发出一次语义未定义的命令。</p></details>
+    </li>
+    <li>撤销功耗改动失败后，为什么记录要保留？
+      <details><summary>答案</summary><p><code>restore</code> 是逐个地址写、中途失败会留下<strong>部分已还原</strong>的状态；保留记录才能重试收尾。原实现 <code>take()</code> 后失败 → 记录永久丢失，用户再无手段。</p></details>
+    </li>
+    <li>契约测试为什么改成解析 <code>app.js</code> 源码？
+      <details><summary>答案</summary><p>原来的两张手写表互相比较，前端新增一个 <code>invoke</code> 而忘记同步表时<strong>测试依然是绿的</strong>；解析源码才能发现"前端调了后端没有的命令"。</p></details>
+    </li>
+    <li>为什么 <code>cargo test --test ipc_contract</code> 通过不代表命令层没问题？
+      <details><summary>答案</summary><p>该测试目标不编译 <code>main.rs</code>（bin 目标）。必须另跑 <code>cargo check --all-targets</code> 或 <code>cargo test --bin mechrevo-max</code>。</p></details>
+    </li>
+  </ol>
+
+  <h3>二、判断题</h3>
+  <ol>
+    <li>"<code>DeviceIoControl</code> 返回 TRUE" 足以证明硬件执行成功。<details><summary>答案</summary><p><strong>错。</strong>官方驱动存在把失败改成成功的路径；本项目一律写后读回校验。</p></details></li>
+    <li>守卫 <code>RestoreGuard</code> 在断言 panic 时也会回滚。<details><summary>答案</summary><p><strong>对。</strong>panic 展开会执行 <code>Drop</code>；<code>guard_restores_after_panic</code> 用 <code>catch_unwind</code> 验证。</p></details></li>
+    <li>锁中毒时 <code>get_status</code> 应该 panic，让用户重启。<details><summary>答案</summary><p><strong>错。</strong>应返回结构化状态 + <code>hint:"restart"</code>，panic 只会让 UI 永久卡死。</p></details></li>
+    <li>脱敏协议基线文档可以包含原始 4096 地址扫描 JSON。<details><summary>答案</summary><p><strong>错。</strong>原始数据含本机特征值，按合规红线不入库；只入库地址表、统计与交叉核对来源。</p></details></li>
+    <li>忙时暂停轮询纯粹是为了省电。<details><summary>答案</summary><p><strong>错。</strong>主要是避免写入期间并发读造成读数抖动、无谓排队与状态错位。</p></details></li>
+  </ol>
+
+  <h3>三、简答题</h3>
+  <ol>
+    <li>用三句话说清"为什么 v0.1.1 不加新功能"。
+      <details><summary>答案要点</summary><p>① 证据链断裂、限速缺失、验证流程自身有洞，三个 P0/P1 直接侵蚀"可验证"这个卖点；② 这些全部能离线验证，零硬件风险，符合"mock 为主、不做真机 E2E"的既定策略；③ 在断裂的地基上加功能只会扩大风险面。</p></details>
+    </li>
+    <li>如果用户报告"设了功耗墙，重启后又变回去了"，你怎么排查？
+      <details><summary>答案要点</summary><p>① 本应用不写持久化配置，改动只在 EC 寄存器，初值由 EC/BIOS 决定（先说明这是已知限制，非 bug）；② 用 <code>tools/ec_health.py</code> 核对当前值与基线；③ 确认是否被官方控制台或 BIOS profile 覆盖；④ 如果用户期望"保持"，那是一个功能需求（v0.2.0 的多级撤销/恢复出厂 + 文案说明）。</p></details>
+    </li>
+    <li>要在 v0.2.0 加温度读数，第一步必须做什么？为什么？
+      <details><summary>答案要点</summary><p>先<strong>确认寄存器</strong>：空闲态、低速只读（≤50 次/秒）、<strong>不施加任何 CPU/GPU 负载</strong>、用户在场，并与外部工具交叉核对；未核对前 <code>AddrStatus</code> 只能标 <code>CommunityUnverified</code> 且禁止任何写入引用。因为跨机型地址不通用（社区称 <code>0x0783</code> 是当前 PL，本机恒为 0）。</p></details>
+    </li>
+    <li>回滚这次版本的两条独立路径分别是什么？
+      <details><summary>答案要点</summary><p>① 软件：下载 v0.1.0 的绿色单文件 exe 覆盖（无安装、无数据迁移）；② 硬件：应用内撤销 → <code>tools/ec_mode_exp.py</code>（<code>finally</code> 强制回滚）→ 重启机器由 EC/BIOS 复位初值。</p></details>
+    </li>
+  </ol>
+</div>
+
+<div class="note ok"><strong>自测记录：</strong>选择题 5/5、判断题 5/5、简答题 4/4 要点齐全（共 14 题 18 项计分点）= <strong>100%</strong>，高于 80% 通过线。测验由本轮实现者自测，不构成独立验收；独立审查见 <code>workflow_status.md</code> 审查区块。</div>
+
+<footer>
+  生成时间 2026-10-24 · 数据来自 <code>evidence/v0.1.1.json</code> 的真实命令输出 ·
+  计划与问题清单见 <code>docs/计划书/下一步改进指南.md</code> · 规则见 <code>AGENTS.md</code>
+</footer>
+
+</div>
+</body>
+</html>

@@ -13,7 +13,7 @@
 > - `❓ 待验证` = 未验证
 > - `🚫 禁用` = 按安全策略刻意不做（见 `docs/SPEC.md` §5.1）
 
-最后全量验证：**2026-10-17**
+最后全量验证：**2026-10-24**
 
 ---
 
@@ -21,19 +21,22 @@
 
 | 项 | 状态 | 证据 | 最后改动 |
 |---|---|---|---|
-| 单元测试（33 个） | ✅ 已验证 | `cargo test` → `33 passed; 0 failed` | 2026-10-17 |
-| clippy 全目标 | ✅ 已验证 | `cargo clippy --all-targets` → 0 warning | 2026-10-17 |
-| 格式化 | ✅ 已验证 | `cargo fmt --check` → 干净 | 2026-10-17 |
-| 文档测试 | ✅ 已验证 | `cargo test` → `1 passed`（doctest） | 2026-10-17 |
+| 单元测试（44 个） | ✅ 已验证 | `cargo test` → `44 passed; 0 failed` | 2026-10-24 |
+| clippy 全目标 | ✅ 已验证 | `cargo clippy --all-targets` → 0 warning | 2026-10-24 |
+| 格式化 | ✅ 已验证 | `cargo fmt --check` → 干净 | 2026-10-24 |
+| 文档测试 | ✅ 已验证 | `cargo test` → `1 passed`（doctest） | 2026-10-24 |
+| EC 访问限速 | ✅ 已验证 | `ec::throttle` 单测 6 个：默认 50 次/秒、低于硬下限被夹回、首次不等待、两次访问间隔达标、4 线程并发被串行 | 2026-10-24 |
+| 回滚守卫（panic 路径） | ✅ 已验证 | `guard_restores_after_panic`（`catch_unwind` 后值已还原） | 2026-10-24 |
 
 ### 覆盖的测试要点（改动这些区域时须重跑）
 
 | 模块 | 已覆盖 |
 |---|---|
 | `ec::transport` | Mock 读写、stuck 地址忽略写入、读失败返回 Err 而非 0 |
-| `ec`（Ec\<T\>） | 写后读回、校验失败检测、位操作只动一位、越界拒绝、快照/回滚往返、快照遇读失败即报错、连续块读 |
+| `ec::throttle` | 默认间隔、硬下限夹取、首次不阻塞、间隔补足、并发串行化 |
+| `ec`（Ec\<T\>） | 写后读回、校验失败检测、位操作只动一位、越界拒绝、快照/回滚往返、快照遇读失败即报错、连续块读、**守卫 drop/disarm/restore_now/panic 回滚** |
 | `control` | 读官方出厂值、越界前置拦截、应用+回滚、**寄存器卡住时自动回滚** |
-| `mode` | 三档识别、未知编码返回 None（不猜）、三档往复切换、**提交寄存器自清零不误报**、卡住时回滚、key 往返 |
+| `mode` | 三档识别、未知编码返回 None（不猜）、三档往复切换、**提交寄存器自清零不误报**、卡住时回滚、key 往返、**提交寄存器不入快照** |
 | `sensors` | CPU/GPU 风扇、项目 ID、AC 检测、**未知电源编码不猜测**、读失败传播 |
 | `namespace` | Gaming/Office 地址不重叠、功耗寄存器均为 Verified、NotApplicable 标注 |
 
@@ -43,11 +46,14 @@
 
 | 项 | 状态 | 证据 | 最后改动 |
 |---|---|---|---|
-| IPC 契约测试（5 个） | ✅ 已验证 | `cargo test --test ipc_contract` → `5 passed` | 2026-10-17 |
+| IPC 契约测试（8 个） | ✅ 已验证 | `cargo test --test ipc_contract` → `8 passed` | 2026-10-24 |
+| IPC 命令层单测（4 个） | ✅ 已验证 | `cargo test --bin mechrevo-max` → `4 passed`（锁中毒→restart 提示、撤销栈容错、EC 访问串行化） | 2026-10-24 |
 | release 构建 | ✅ 已验证 | `cargo build --release` → 成功，exe 4.76 MB | 2026-10-17 |
-| 前端语法 | ✅ 已验证 | `node --check app/ui/app.js` → 通过 | 2026-10-17 |
+| 前端语法 | ✅ 已验证 | `node --check app/ui/app.js` → 通过 | 2026-10-24 |
+| 前端源码契约解析 | ✅ 已验证 | `frontend_source_ipc_table_matches_backend`：解析 `app.js` 的 `IPC` 表并与后端命令集双向比对；`no_raw_string_command_names_in_frontend` 禁止裸字符串命令名 | 2026-10-24 |
 | UI 元素 id 与 `ui` 映射一致性 | ✅ 静态确认 | 28 项逐一比对，全部匹配 | 2026-10-17 |
-| 界面真实渲染 | ✅ 已验证 | 截图 `docs/screenshots/main.png`（显示真实 EC 数据） | 2026-10-17 |
+| 可访问性 | ✅ 静态确认 | `:focus-visible` 覆盖按钮/滑块/tab；`role="status" aria-live` 状态栏；`role="alert"` 告警区；`prefers-reduced-motion` 降级 | 2026-10-24 |
+| 界面真实渲染 | ✅ 已验证 | 截图 `docs/screenshots/main.png`（显示真实 EC 数据，v0.1.0 时采集） | 2026-10-17 |
 | 前后端端到端（UI 自动化） | 🚫 禁用 | 见 `docs/SPEC.md` §5.1（避免反复启停驱动硬件） | — |
 
 ### IPC 契约测试覆盖
@@ -55,7 +61,10 @@
 | 测试 | 作用 |
 |---|---|
 | `camel_case_conversion_matches_tauri` | 转换规则与 Tauri 一致 |
-| `frontend_and_backend_command_sets_match_exactly` | 双向命令集完全一致（防「调不存在的命令」与「死命令」） |
+| `frontend_and_backend_command_sets_match_exactly` | 手写两表双向一致 |
+| `frontend_source_ipc_table_matches_backend` | **解析前端真实源码**的 `IPC` 表，与后端命令集双向比对 |
+| `no_raw_string_command_names_in_frontend` | 禁止绕过 `IPC` 表直接传字符串命令名 |
+| `manual_contract_matches_source_ipc_table` | 手写参数表与源码契约表不漂移 |
 | `parameter_names_match_with_camel_case_conversion` | 逐参数名匹配 |
 | `no_snake_case_leaks_to_contract` | 前端参数不得含下划线（Tauri v2 静默失败点） |
 | `command_names_are_lowercase_identifiers` | 命令名合法性 |
@@ -100,7 +109,7 @@
 
 | 脚本 | 状态 | 用途 |
 |---|---|---|
-| `ec_health.ps1`（即 `tools/ec_health.py`） | ✅ | EC 健康 |
+| `ec_health.py`（即 `tools/ec_health.py`，无 ps1 版本） | ✅ | EC 健康 |
 | `hw_health.ps1` | ✅ 已验证 | 温度/电源/风扇/EC 快照 |
 | `diagnose_reboot.ps1` | ✅ 已验证 | 重启原因（Event 41/6008/1001/WHEA） |
 | `enum_drivers.ps1` | ✅ 已验证 | 驱动包枚举 |

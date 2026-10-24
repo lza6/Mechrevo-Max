@@ -1,0 +1,124 @@
+{
+  "task_id": "v0.1.1",
+  "status": "passed",
+  "timestamp": "2026-10-24T20:28:00+08:00",
+  "scope": "护栏补丁：EC 访问串行化 / 限速护栏 / RAII 回滚守卫 / undo 不丢记录 / 证据链 / 契约测试源码解析 / 可访问性 / 清理",
+  "commands_executed": [
+    {
+      "cmd": "cd core && cargo test --offline",
+      "exit_code": 0,
+      "raw_output_tail": "running 44 tests\ntest result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s\n\nrunning 7 tests\ntest result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nrunning 1 test\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    },
+    {
+      "cmd": "cd core && cargo clippy --offline --all-targets",
+      "exit_code": 0,
+      "raw_output_tail": "Checking mechrevo-core v0.1.1 (...)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.23s\n(0 warning)"
+    },
+    {
+      "cmd": "cd core && cargo fmt --check",
+      "exit_code": 0,
+      "raw_output_tail": "(no output) fmt exit=0"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max",
+      "exit_code": 0,
+      "raw_output_tail": "running 4 tests\ntest tests::fresh_state_has_nothing_to_undo ... ok\ntest tests::undo_flags_tolerates_poisoned_undo_lock ... ok\ntest tests::lock_ec_returns_actionable_hint_instead_of_panicking ... ok\ntest tests::lock_ec_serializes_access ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --test ipc_contract",
+      "exit_code": 0,
+      "raw_output_tail": "running 8 tests\ntest tests::camel_case_conversion_matches_tauri ... ok\ntest tests::command_names_are_lowercase_identifiers ... ok\ntest tests::frontend_and_backend_command_sets_match_exactly ... ok\ntest tests::manual_contract_matches_source_ipc_table ... ok\ntest tests::no_snake_case_leaks_to_contract ... ok\ntest tests::frontend_source_ipc_table_matches_backend ... ok\ntest tests::no_raw_string_command_names_in_frontend ... ok\ntest tests::parameter_names_match_with_camel_case_conversion ... ok\n\ntest result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo check --offline --all-targets",
+      "exit_code": 0,
+      "raw_output_tail": "Compiling mechrevo-max v0.1.1 (...)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 11s"
+    },
+    {
+      "cmd": "node --check app/ui/app.js",
+      "exit_code": 0,
+      "raw_output_tail": "(no output) node exit=0"
+    },
+    {
+      "cmd": "cd app/src-tauri && export PATH=\"/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64:$PATH\" && cargo build --release --offline",
+      "exit_code": 0,
+      "raw_output_tail": "   Compiling tauri-runtime-wry v2.12.2\n    Finished `release` profile [optimized] target(s) in 1m 55s\n-rwxr-xr-x 2 Administrator 197121 4992512 Oct 24 20:28 target/release/mechrevo-max.exe"
+    }
+  ],
+  "files_changed": [
+    "core/src/ec/throttle.rs (新增)",
+    "core/src/ec/windows.rs",
+    "core/src/ec/mod.rs",
+    "core/src/mode.rs",
+    "core/src/lib.rs",
+    "core/Cargo.toml",
+    "core/Cargo.lock",
+    "core/tests/hardware.rs",
+    "app/src-tauri/src/main.rs",
+    "app/src-tauri/tests/ipc_contract.rs",
+    "app/src-tauri/Cargo.toml",
+    "app/src-tauri/Cargo.lock",
+    "app/src-tauri/tauri.conf.json",
+    "app/ui/app.js",
+    "app/ui/index.html",
+    "app/ui/style.css",
+    "docs/protocol/ec-baseline.md (新增)",
+    "docs/protocol/ec-access.md",
+    "docs/ARCHITECTURE.md",
+    "docs/CONTRIBUTING.md",
+    "docs/DEPLOYMENT.md",
+    "docs/REQUIREMENTS-TRACEABILITY.md",
+    "docs/VERIFICATION-LEDGER.md",
+    "README.md",
+    "CHANGELOG.md",
+    "workflow_status.md",
+    "project_specs.md (新增)",
+    ".gitignore",
+    "AGENTS.md (新增)",
+    ".agent/skills/*.md (9 个，新增)",
+    ".agent/memory/*.md (7 个，新增)"
+  ],
+  "tests": [
+    { "name": "core unit tests", "type": "unit", "status": "passed", "evidence": "cargo test --offline → 44 passed" },
+    { "name": "core doctest", "type": "unit", "status": "passed", "evidence": "1 passed" },
+    { "name": "ipc command-layer unit tests", "type": "unit", "status": "passed", "evidence": "cargo test --bin mechrevo-max → 4 passed" },
+    { "name": "ipc contract tests", "type": "integration", "status": "passed", "evidence": "cargo test --test ipc_contract → 8 passed" },
+    { "name": "clippy", "type": "lint", "status": "passed", "evidence": "0 warning" },
+    { "name": "rustfmt", "type": "lint", "status": "passed", "evidence": "cargo fmt --check exit 0" },
+    { "name": "frontend syntax", "type": "lint", "status": "passed", "evidence": "node --check app/ui/app.js exit 0" },
+    { "name": "type check (含 main.rs)", "type": "build", "status": "passed", "evidence": "cargo check --all-targets exit 0" },
+    { "name": "release build", "type": "build", "status": "passed", "evidence": "mechrevo-max.exe 4992512 B" },
+    { "name": "真机硬件集成测试", "type": "integration", "status": "skipped", "evidence": "7 个 #[ignore]；按 docs/SPEC.md §5.1 与用户指示不执行" },
+    { "name": "GUI E2E", "type": "e2e", "status": "blocked", "evidence": "用户明确禁用真机 UI 自动化" }
+  ],
+  "coverage_summary": {
+    "lines": null,
+    "branches": null,
+    "functions": null,
+    "statements": null
+  },
+  "seams_touched": [
+    "IPC 契约（app/ui/app.js IPC 表 ↔ main.rs 命令注册）",
+    "EC 传输层（WindowsAcpiTransport::ioctl ↔ AccessThrottle）",
+    "EC 读写在 core 内（Ec ↔ EcTransport）与 app 层（AppState.ec 锁）之间的所有权/串行化边界"
+  ],
+  "mock_scenarios_covered": ["stuck_write（写了不生效）", "failing_read（读失败返回 Err 而非 0）", "panic_path（守卫回滚）", "lock_poison（锁中毒）", "concurrent_access（并发串行化）"],
+  "browser_validation": {
+    "performed": false,
+    "paths": [],
+    "screenshots": []
+  },
+  "artifact": {
+    "path": "app/src-tauri/target/release/mechrevo-max.exe",
+    "size_bytes": 4992512,
+    "sha256": "aa4bcaafd9a0de3c6f2ef9187e636022dcd61bb0f58f235befa86b92beae9cc9"
+  },
+  "limitations": [
+    "真机硬件集成测试未执行（按安全策略）",
+    "GUI 运行时路径未在浏览器/真实窗口中验证（用户禁止真机 E2E）",
+    "覆盖率无工具、无基线，故为 null",
+    "跨机型行为未验证（仅 1 台机器）",
+    "MSI/NSIS 安装包未构建验证",
+    "GitHub Release 页面未能联网复核"
+  ]
+}

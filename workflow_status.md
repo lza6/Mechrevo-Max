@@ -1,6 +1,24 @@
 # 机械革命控制台自研 —— 工作状态
 
-> 只记录事实与证据。最后更新：2026-10-17
+> 只记录事实与证据。最后更新：2026-10-24
+
+## 2026-10-24 · v0.1.1 护栏补丁（本轮）
+
+**范围**：不新增硬件功能，只补安全与可信地基。任务状态权威源为 `project_specs.md`，
+改进计划为 `docs/计划书/下一步改进指南.md`，证据为 `evidence/v0.1.1.json`。
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| EC 访问串行化 | `AppState.ec` 互斥 + 忙时停轮询 | `lock_ec_serializes_access` 单测 |
+| 访问限速 | `AccessThrottle` 挂在唯一 IOCTL 出口（默认 50 次/秒，硬下限 100 次/秒） | `ec::throttle` 6 单测 |
+| panic 也回滚 | `Ec::guard()` + `RestoreGuard` | `guard_restores_after_panic` |
+| 撤销不丢记录 | 成功才出栈 | `main.rs` `undo_*` |
+| 证据链 | `docs/protocol/ec-baseline.md`（脱敏） | 5 处引用已改 |
+| 契约测试 | 解析 `app/ui/app.js` 的 `IPC` 表双向比对 | `ipc_contract` 8 单测 |
+| 验证 | 核心 44 单测 + 1 doctest；bin 4 单测；契约 8；clippy 0 warning；fmt 干净；release exe 4 992 512 B | `evidence/v0.1.1.json` |
+
+**未执行**：真机硬件测试（安全策略）、GUI E2E（用户禁用）、覆盖率（无工具）、Release 页面复核（本机 `api.github.com` 不通）。
+**计划文档审计**：32 个 md，0 个可删（见 `docs/计划书/闭环审计-20261024.md`）。
 
 ## ⚠️ 重大事件记录：2026-10-17 意外硬复位
 
@@ -92,7 +110,7 @@
 |---|---|---|---|
 | A1 | 摸清官方控制台完整架构与功能清单 | **已完成** | 见「已达成的发现」 |
 | A2 | 打通本机 EC 读写通道 | **已完成** | EC 读 8/8 成功，全量扫描 4096 地址 |
-| A3 | 产出本机 EC 全寄存器表 | **已完成（基线）** | `reverse/evidence/ec-scan.json`；已验证 7 项关键地址 |
+| A3 | 产出本机 EC 全寄存器表 | **已完成（基线）** | 脱敏可复核基线：`docs/protocol/ec-baseline.md`；原始数据 `reverse/evidence/ec-scan.json`（不入库）；已验证 7 项关键地址 |
 | A4 | 自研控制台读数功能可用 | **已完成（核心库）** | Rust `Sensors` + 真机测试通过 |
 | A5 | 模式切换可用 | **已完成（核心库）** | `0x751`/`0x7AB` 三档实测通过，见协议文档第 7 节 |
 | A6 | 功耗调优可用 | **已完成（核心库）** | Rust `PowerController`，真机写入+回滚通过 |
@@ -347,8 +365,12 @@ Office: PowerLimits { pl1: 45, pl2: 45, pl4: 200 }
 
 ## 下一步
 
-1. **【需用户决策】解决 B1**：选择方案 A/B/C/D
-2. 继续静态摸透：反编译 `5.56.51.26` 版 SystrayComponent（对比两版差异）
-3. 解析 `resources.pri`（UWP 资源包）
-4. 把 `UserFanTables/PH6PG*` 与官方 profile 交叉比对，建立机型映射表
-5. 设计自研架构（协议层抽象 + 可离线测试）
+> 2026-10-24 更新：B1 早已解决（见上）；v0.1.1 护栏补丁已落地。
+> 任务状态的权威来源改为 `project_specs.md`，改进计划见 `docs/计划书/下一步改进指南.md`。
+
+1. **v0.2.0（已拍板，下一站）**：温度寄存器保守探测（只读、≤50 次/秒、不施负载、用户在场）
+   → 交叉核对 → 登记 `AddrStatus` → UI 温度卡
+2. v0.2.1：CI + 覆盖率基线 + 打包（msi/nsis）验证
+3. v0.3.0（blocked：需第二台机型）：寄存器档案外置 + 能力协商 + 未知机型安全降级
+4. 可选静态深化：反编译 `5.56.51.26` 版 SystrayComponent 对比差异；解析 `resources.pri`；
+   `UserFanTables/PH6PG*` 与官方 profile 交叉比对建立机型映射表

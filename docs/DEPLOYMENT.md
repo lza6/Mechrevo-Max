@@ -186,11 +186,18 @@ gh release download v0.1.0 --pattern "mechrevo-max.exe"
 - [ ] `core`: `cargo test` 全过
 - [ ] `core`: `cargo clippy --all-targets` 0 warning
 - [ ] `core`: `cargo fmt --check` 干净
-- [ ] `app`: `cargo test --test ipc_contract` 全过
+- [ ] `app`: `cargo test --bin mechrevo-max` 全过（IPC 命令层的锁/中毒/串行化单测）
+- [ ] `app`: `cargo test --test ipc_contract` 全过（含对 `app/ui/app.js` IPC 契约表的源码解析）
 - [ ] `app`: `cargo build --release` 成功
-- [ ] 三处版本号已同步
-- [ ] `CHANGELOG.md` 已更新
+- [ ] 三处版本号已同步（`core/Cargo.toml`、`app/src-tauri/Cargo.toml`、`tauri.conf.json`）
+- [ ] `CHANGELOG.md` 已更新，且文中数字（测试数、工具数、文件数）与事实一致
+- [ ] **文档一致性自检**（新增，防止"改了代码没改文档"）：
+  - [ ] `grep -rn "reverse/evidence" README.md docs/ workflow_status.md` 的每一处都指向**存在**的文件，或明确写了"不入库"
+  - [ ] `docs/VERIFICATION-LEDGER.md` 的时间戳已更新，改动过但未重跑的项目退回 `❓ 待验证`
+  - [ ] `docs/REQUIREMENTS-TRACEABILITY.md` 里没有与实际状态相反的条目
+  - [ ] `project_specs.md` 的里程碑与任务状态已更新
 - [ ] `README.md` 的功能清单与真实状态一致
-- [ ] `docs/protocol/ec-access.md` 与真实协议一致
-- [ ] **未打包任何官方二进制/驱动/反编译产物**（合规红线）
+- [ ] `docs/protocol/ec-access.md` / `docs/protocol/ec-baseline.md` 与真实协议一致
+- [ ] **未打包任何官方二进制/驱动/反编译产物**（合规红线）：
+  `git ls-files | grep -Ei "\.(sys|msix|msixbundle|dll|exe)$"` 输出为空
 - [ ] 低频只读自检通过：`python -X utf8 -I tools/ec_health.py`

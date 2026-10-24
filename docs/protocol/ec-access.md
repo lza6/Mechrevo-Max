@@ -1,7 +1,8 @@
 # EC 访问协议（本机实测）
 
 > 本文档记录 2026-10-16 在本机（MECHREVO 旷世16 Pro GM6PQ0X）上**实测通过**的 EC 访问方法。
-> 所有结论均有证据，见 `reverse/evidence/`。
+> **入库的可复核基线**见 [`ec-baseline.md`](ec-baseline.md)（脱敏：地址表 + 扫描统计，不含本机唯一标识）；
+> 原始扫描数据含本机特征值，仅在本地留存、不入库。
 
 ## 1. 前置条件：设备对象必须存在
 
@@ -111,7 +112,8 @@ Get-PnpDevice | Where-Object { $_.InstanceId -like '*INOU*' }
 - 耗时约 6.6 秒
 - 4096 个地址全部读取成功
 - **2002 个非零地址**
-- 结果存档：`reverse/evidence/ec-scan.json`
+- 结果存档：原始 JSON 含本机特征值，仅在本地留存（`reverse/evidence/ec-scan.json`，不入库）；
+  可复核的统计已脱敏入库，见 [`ec-baseline.md`](ec-baseline.md) §4
 
 ## 7. 运行档位（性能模式）协议 ⭐ 本机已验证
 

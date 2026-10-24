@@ -1,0 +1,107 @@
+# 项目任务追踪（权威源）
+
+> 本文件是**任务状态**的单一权威来源。之前由 `workflow_status.md` 与 `docs/REQUIREMENTS-TRACEABILITY.md` 兼任，二者已出现过期漂移（见 `docs/计划书/下一步改进指南.md` §1.4）。
+>
+> 规则：
+> 1. 只有**观察到可复现的交付证据**才允许改状态为 `done`；
+> 2. 状态取值：`todo` / `doing` / `done` / `blocked` / `n/a`（附理由）；
+> 3. 每次状态变更必须写 `证据` 列（命令输出、文件路径、截图、Release URL）；
+> 4. 验证细节仍在 `docs/VERIFICATION-LEDGER.md`，本文件不重复。
+>
+> 最后更新：2026-10-24
+
+---
+
+## 1. 项目身份
+
+| 项 | 值 |
+|---|---|
+| 名称 | Mechrevo-Max（机械革命自研控制台） |
+| 形态 | Windows x64 桌面应用（Rust `mechrevo-core` + Tauri v2） |
+| 仓库 | https://github.com/lza6/Mechrevo-Max |
+| 当前版本 | v0.1.1（护栏补丁） |
+| 主分支 HEAD | 见 `git log -1`（v0.1.1 提交） |
+| 规格基线 | `docs/SPEC.md`（安全红线在 §5.1） |
+
+---
+
+## 2. 里程碑（M）
+
+| # | 里程碑 | 目标状态 | 验收标准 | 证据 | 状态 |
+|---|---|---|---|---|---|
+| M1 | v0.1.0 首个可用版本 | ✅ 已达成 | 核心链路真机验证 + 发布 | tag `v0.1.0`、`mechrevo-max.exe` 4.76 MiB | done |
+| M2 | v0.1.1 护栏补丁 | ✅ 已达成 | P0/P1 全部离线可修项关闭 | 核心 44 单测 + bin 4 单测 + 契约 8 单测全绿；证据 `evidence/v0.1.1.json` | done |
+| M3 | v0.2.0 可观测性（温度） | **已确认下一站**（Q-01） | 温度读数与外部工具交叉吻合；探测全程限速只读 | 待填 | todo |
+| M4 | v0.2.1 工程化 | 规划 | CI 必绿 + 覆盖率基线 + 打包验证 | 待填 | todo |
+| M5 | v0.3.0 多机型 | blocked | 第二台机型只读可用 + 未知机型安全降级 | 需第二台机器 | blocked |
+| M6 | v0.4.0 产品化 | 规划 | 干净系统按向导走通全链路 | 待填 | todo |
+| M7 | v0.5+ 高风险写入 | 规划 | 逐项评审 + 行为级有效性验证 | 待填 | todo |
+| M8 | v1.0.0 稳定版 | 规划 | API 冻结 + ≥3 机型 + 文档齐备 | 待填 | todo |
+
+---
+
+## 3. 当前迭代任务（v0.1.1）
+
+详见 `docs/计划书/下一步改进指南.md` §9。此处只跟踪状态。
+
+| # | 任务 | 对应缺陷 | 优先级 | 状态 | 证据 |
+|---|---|---|---|---|---|
+| T-011-01 | `AppState` 加 EC 访问互斥 | P1-01 | P1 | **done** | `main.rs` `AppState.ec`；`lock_ec_serializes_access` 单测断言临界区内并发数恒为 1 |
+| T-011-02 | `undo_*` 失败时保留回滚记录 | P1-02 | P1 | **done** | 改为"成功才出栈"，失败文案提示可重试 |
+| T-011-03 | `AccessThrottle` 限速（唯一 IOCTL 出口） | P1-03 | P1 | **done** | `core/src/ec/throttle.rs` + `windows.rs::ioctl` 首行；6 个单测 |
+| T-011-04 | 真机测试 RAII 回滚 guard | P0-01 | P0 | **done** | `Ec::guard` + `RestoreGuard`；`guard_restores_after_panic` 单测；`hardware.rs` 两处写测试改用守卫 |
+| T-011-05 | busy 期间暂停轮询 | P1-01 | P1 | **done** | `app.js` `startPolling/stopPolling`、`refresh(force)` 在飞标记 |
+| T-011-06 | 脱敏协议基线文档 + 改 5 处引用 | P0-02 | P0 | **done** | `docs/protocol/ec-baseline.md`；README / ec-access / workflow_status / CONTRIBUTING 引用已改 |
+| T-011-07 | 修正 4 处文档过期 | P1-05 | P1 | **done** | 需求矩阵 R10/R11、`workflow_status` 下一步、工具数 12→16、`ec_health.ps1` |
+| T-011-08 | 删除死依赖 `serde_json`/`tracing`/`tempfile` | P2-05 | P2 | **done** | `core/Cargo.toml`；`Cargo.lock` 净减 194 行 |
+| T-011-09 | 清理空目录 + `graft/` 入 ignore | P3-04 / P3-10 | P3 | **done** | 删除 `protocol/`、`test/`；`.gitignore` 增 `graft/` |
+| T-011-10 | 发布清单加文档一致性检查 | P1-05 | P1 | **done** | `docs/DEPLOYMENT.md` §7 |
+| T-011-11 | 三处版本号同步 + CHANGELOG 0.1.1 | — | — | **done** | `core`/`app`/`tauri.conf.json` 均 0.1.1；CHANGELOG 已加段 |
+| T-011-12 | 提交寄存器移出快照（原 P2-09） | P2-09 | P2 | **done** | `mode.rs` `MODE_REGS` 2 项；`rollback_point_excludes_commit_register` 单测 |
+| T-011-13 | 契约测试解析前端源码（原 P2-01） | P2-01 | P2 | **done** | `app.js` `IPC` 表 + `parse_ipc_table` / `no_raw_string_command_names_in_frontend` |
+| T-011-14 | 可访问性：焦点可见 / aria-live / reduced-motion（原 P2-04） | P2-04 | P2 | **done** | `style.css` 新增段 + `index.html` role/aria-live |
+
+---
+
+## 4. 待用户决策（阻塞项）
+
+> 2026-10-24：Q-01、Q-02 已拍板。
+
+| # | 决策 | 阻塞什么 | 状态 | 结论 |
+|---|---|---|---|---|
+| Q-01 | v0.1.1 之后走哪条线 | M3–M6 的排序 | **已拍板** | 温度读数（v0.2.0）优先；顺序固定为 M2 → M3 → M4 → M5 → M6，不插入 |
+| Q-02 | 证据链补法 | T-011-06 的具体形态 | **已拍板** | 提交 `docs/protocol/ec-baseline.md`（脱敏协议基线），原始 `ec-scan.json` 继续不入库 |
+| Q-03 | `tools/ec_stress.py` 去留 | 策略一致性 | 待拍板 | 不阻塞 v0.1.1，延后到 v0.2.1 |
+| Q-04 | 是否实现自动更新（需签名密钥 + 托管） | M6 | 待拍板 | 最早 v0.4.0 决策 |
+| Q-05 | 托盘常驻 / 开机自启 | M6 | 待拍板 | 最早 v0.4.0 决策 |
+
+### 4.1 因决策产生的执行约束
+
+1. **v0.2.0 温度探测必须用户在场**：低速只读（≤50 次/秒）、空闲态、禁止施加任何 CPU/GPU 负载、单次会话、异常即停。
+2. 温度寄存器在未与外部工具交叉核对前，`AddrStatus` 只能是 `CommunityUnverified`，且**禁止任何写入路径**引用它。
+
+---
+
+## 5. 硬性不变量（不可绕过）
+
+1. EC 访问必须有代码内强制限速（默认 ≤50 次/秒，硬上限 100 次/秒）—— `docs/SPEC.md` §5.1
+2. 禁止 CPU/GPU 满载压力测试；禁止真机 UI 自动化 E2E
+3. 写 EC 必须：先 `snapshot` → 写入 → 读回校验 → 失败自动回滚
+4. 读失败必须返回 `Err`，绝不用 0 代替
+5. 新寄存器必须标 `AddrStatus`（Verified / CommunityUnverified / NotApplicable）
+6. 不打包、不分发任何官方二进制 / 驱动 / 反编译产物
+7. 应用运行期需要管理员权限，不得静默提权；未放宽 CSP、未引入远程内容
+
+---
+
+## 6. 相关文件
+
+| 用途 | 路径 |
+|---|---|
+| 改进计划与问题清单 | `docs/计划书/下一步改进指南.md` |
+| 规格基线 | `docs/SPEC.md` |
+| 协议权威 | `docs/protocol/ec-access.md` |
+| 验证台账（避免重复验证） | `docs/VERIFICATION-LEDGER.md` |
+| 历史任务台账与事件记录 | `workflow_status.md` |
+| 需求追踪（历史编号 R1–R23） | `docs/REQUIREMENTS-TRACEABILITY.md` |
+| 本轮任务记录 / 周报 | `tasks/riper5_20261024_194117.md`、`tasks/weekly.md` |

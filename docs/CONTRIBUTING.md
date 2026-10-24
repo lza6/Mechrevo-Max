@@ -163,6 +163,7 @@ node --check ../ui/app.js
 - ❌ `UWACPIDriver.sys` 或其他官方驱动
 - ❌ 官方程序的反编译输出
 - ❌ 任何含本机特征值的实测数据（`reverse/evidence/*.json` 已在 `.gitignore`）
+- ✅ 但**应该**提交可复核的脱敏结论 → `docs/protocol/ec-baseline.md`（只放地址表、统计、交叉核对来源，不放原始数据）
 
 本仓库只放**自研代码**与**协议分析结论**。协议知识来源于社区公开逆向成果
 （见 `docs/protocol/ec-access.md` §8），本项目在其基础上独立实现并在真机重新验证。

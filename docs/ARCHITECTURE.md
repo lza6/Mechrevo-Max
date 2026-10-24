@@ -86,9 +86,11 @@ IPC 层只保留无法测试的部分（Tauri 命令注册本身）。
 | **写后强制读回校验** | 同上。`write_verified` 是默认路径，`write_unverified` 需要显式说明理由 |
 | **每次写入前存 `RollbackPoint`** | 硬件写入不可撤销，必须能回退 |
 | **批量写入失败自动回滚已写项** | 避免留下「半改」状态 |
+| **会写硬件的代码路径必须持有 `RestoreGuard`** | Rust 没有 `finally`：断言失败会 panic 展开并跳过后续语句，只有 `Drop` 会执行。守卫让"panic 也回滚"成立 |
 | **寄存器地址标注 `AddrStatus`** | 跨机型地址不通用，必须区分「本机已验证」与「社区未验证」 |
-| **提交寄存器不做读回校验** | `0x0767` 写入后硬件自动清零，校验会误报失败 |
-| **EC 访问强制限速** | 见 `docs/SPEC.md` §5.1 —— 泛洪会导致单片机停摆与硬复位 |
+| **提交寄存器不做读回校验，且不进快照** | `0x0767` 写入后硬件自动清零：校验会误报失败；没有"原始值"可还原，撤销时去写它会执行一次语义不明的命令 |
+| **EC 访问强制限速，且只在传输层实现一次** | 见 `docs/SPEC.md` §5.1。放在 `WindowsAcpiTransport` 的唯一 IOCTL 出口，才能保证新增调用路径无法绕过 |
+| **EC 访问必须串行化** | EC 硬件不支持并发。串行化落在 IPC 层的 `AppState.ec` 互斥上；前端在"忙"期间暂停轮询，避免无谓排队与读数抖动 |
 
 ---
 
@@ -97,9 +99,10 @@ IPC 层只保留无法测试的部分（Tauri 命令注册本身）。
 ```
 core/src/
   ec/
-    mod.rs          Ec<T>：读写、回滚、位操作；RollbackPoint
+    mod.rs          Ec<T>：读写、回滚、位操作；RollbackPoint；RestoreGuard（RAII 回滚）
+    throttle.rs     AccessThrottle：访问间隔下限（默认 50 次/秒，硬下限 10 ms）
     transport.rs    EcTransport trait + MockTransport
-    windows.rs      WindowsAcpiTransport（IOCTL 封装，含 unsafe）
+    windows.rs      WindowsAcpiTransport（IOCTL 封装，含 unsafe）+ 在唯一出口处限速
   control.rs        PowerController：PL1/2/4 读写 + 校验 + 回滚
   mode.rs           ModeController：档位切换 + 提交寄存器处理
   sensors.rs        Sensors：只读读数
@@ -107,19 +110,19 @@ core/src/
   error.rs          Error 枚举（每个变体都说明失败原因）
   lib.rs            公开 API 与 crate 文档
 
-core/tests/hardware.rs   真机测试（#[ignore]，按需运行）
+core/tests/hardware.rs   真机测试（#[ignore]，按需运行；写测试必须挂 RestoreGuard）
 
 app/src-tauri/
-  src/main.rs       IPC 命令 + 窗口适配 + DPI 声明
-  tests/ipc_contract.rs   前后端契约的编译期校验
+  src/main.rs       IPC 命令 + EC 访问串行化（AppState.ec 互斥）+ 窗口适配 + DPI 声明
+  tests/ipc_contract.rs   前后端契约：手写表 + 解析 app/ui/app.js 的 IPC 契约表
   build.rs          构建脚本（不自定义清单，见文件内注释）
   tauri.conf.json   窗口/CSP/权限配置
   capabilities/     Tauri v2 权限声明
 
 app/ui/             原生前端（无构建步骤）
   index.html        结构
-  style.css         设计令牌 + 布局
-  app.js            状态管理 + IPC 调用
+  style.css         设计令牌 + 布局 + 焦点可见性/reduced-motion
+  app.js            IPC 契约表 + 状态管理 + 轮询（忙时暂停）
 
 tools/              逆向与验证工具（Python）
   ec_*.py           EC 读取/扫描/验证/健康自检/压测（全局限速）

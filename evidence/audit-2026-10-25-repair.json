@@ -1,0 +1,198 @@
+{
+  "task_id": "audit-2026-10-25-repair",
+  "status": "passed",
+  "timestamp": "2026-10-25T05:00:00+08:00",
+  "scope": "采样与降级路径定向审计修复：外部超时、未知值、电池存在性、EC 锁外采样、曲线失败退避、诊断字段、EC 连续读边界",
+  "commands_executed": [
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max sysinfo::tests",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 3.32s"
+    },
+    {
+      "cmd": "RUSTDOC=C:/Users/Administrator.DESKTOP-EGNE9ND/.rustup/toolchains/1.95.0-x86_64-pc-windows-msvc/bin/rustdoc.exe cargo test --offline (core)",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 70 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s\ntest result: ok. 0 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 0.00s\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.26s"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --test ipc_contract",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    },
+    {
+      "cmd": "core/app cargo clippy --offline --all-targets -- -D warnings && cargo fmt --check",
+      "exit_code": 0,
+      "raw_output_tail": "Checking mechrevo-max v0.5.0 (...)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.26s\n[exited with code 0]"
+    },
+    {
+      "cmd": "PLAYWRIGHT_MODULE=C:/Users/Administrator.DESKTOP-EGNE9ND/AppData/Roaming/npm/node_modules/gsd-pi/node_modules/playwright-core node tools/qa_browser.cjs",
+      "exit_code": 0,
+      "raw_output_tail": "[qa] browser launched\n[qa] init injected\n[qa] page loaded\n[qa] ready\n{\n  \"total\": 17,\n  \"passed\": 17,\n  \"failed\": [],\n  \"errors\": []"
+    },
+    {
+      "cmd": "python -X utf8 -I tools/ec_health.py",
+      "exit_code": 0,
+      "raw_output_tail": "[1] 关键寄存器\n  ✅ 0x0740 项目 ID = 16 (0x10)\n  ✅ 0x0490 电源来源 = 7 (0x07)\n  ✅ 0x0730 Gaming PL1 = 75 (0x4B)\n  ✅ 0x0732 Gaming PL4 = 200 (0xC8)\n  ✅ 0x0734 Office PL1 = 45 (0x2D)\n  ✅ 0x0751 档位字段1 = 0 (0x00)\n  ✅ 0x07AB 档位字段2 = 0 (0x00)\n[2] 动态采样（风扇转速，连续 6 次，间隔 1 秒）\n  范围: 4707 - 5284 RPM\n[3] 连续读取稳定性（500 次）\n  成功 519 / 失败 0，耗时 10.4s\n==================================================================\n✅ EC 工作正常：寄存器读数合理、风扇在实时采样、连续读取无失败。"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo build --release --offline",
+      "exit_code": 0,
+      "raw_output_tail": "Compiling mechrevo-max v0.5.0 (...)\n    Finished `release` profile [optimized] target(s) in 1m 04s\n7f3c4bb71d407021647bc71a74bb0fc5b86be2c5dbcef0c9cdd175c8c7219d4c *target/release/mechrevo-max.exe\n5393920\n[exited with code 0]"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max && cargo clippy --offline --all-targets -- -D warnings && cargo fmt --check && cargo build --release --offline",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.77s\n   Compiling mechrevo-max v0.5.1 (...)\n    Finished `release` profile [optimized] target(s) in 59.59s\ndc2c0330c4f6e09e5a70e1917d4ae21d15381afb6973b2a3446ea8c6e2970e56 *target/release/mechrevo-max.exe\n5395456\n[exited with code 0]"
+    },
+    {
+      "cmd": "node tools/qa_browser.cjs",
+      "exit_code": 0,
+      "raw_output_tail": "[qa] browser launched\n[qa] init injected\n[qa] page loaded\n[qa] ready\n{\n  \"total\": 21,\n  \"passed\": 21,\n  \"failed\": [],\n  \"errors\": []"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max sysinfo::tests",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 2.16s"
+    }
+  ],
+  "files_changed": [
+    "core/src/ec/mod.rs",
+    "app/src-tauri/src/sysinfo.rs",
+    "app/src-tauri/src/main.rs",
+    "app/ui/app.js",
+    "docs/SPEC.md",
+    "docs/qa/ui-smoke-spec.md",
+    "README.md",
+    "test_ledger.md",
+    "workflow_status.md",
+    "tools/qa_browser.cjs",
+    "docs/screenshots/audit-cooling.png",
+    "docs/screenshots/audit-cooling-error.png",
+    "docs/screenshots/audit-advanced.png",
+    ".agent/skills/add-new-feature.md",
+    "docs/adr/0001-sampling-decoupled-from-ec.md",
+    ".wolf/",
+    "docs/archive/plans/20261025/",
+    "CHANGELOG.md",
+    "reports/change-report-2026-10-24.html",
+    "docs/VERIFICATION-LEDGER.md",
+    "docs/REQUIREMENTS-TRACEABILITY.md",
+    "project_specs.md",
+    ".agent/memory/"
+  ],
+  "tests": [
+    {
+      "name": "core 单元测试 + doctest",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "70 passed + 1 doctest；8 真机测试按策略 ignored"
+    },
+    {
+      "name": "app 单测",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "32 passed"
+    },
+    {
+      "name": "IPC 契约",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "8 passed"
+    },
+    {
+      "name": "采样边界",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "11 passed（无电池/合法磁盘/无效与合法 GPU/温度换算等）"
+    },
+    {
+      "name": "前端降级与失败路径",
+      "type": "e2e",
+      "status": "passed",
+      "evidence": "独立 Chromium + mock IPC，21/21；不证明真实 EC"
+    },
+    {
+      "name": "真机只读健康",
+      "type": "smoke",
+      "status": "passed",
+      "evidence": "519 次读取 0 失败；0x751=0x00；未写硬件"
+    },
+    {
+      "name": "独立审查",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "Request Changes → 电池温度单位修复 → 独立 reviewer Approve；doc-auditor 扫描 39 个 md"
+    },
+    {
+      "name": "真实 GUI 外观",
+      "type": "e2e",
+      "status": "blocked",
+      "evidence": "遵守禁止真机 UI 自动化；本轮未启动/操作真实窗口"
+    },
+    {
+      "name": "文档归档",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "历史审计复制 cmp 一致后归档，manifest 记录 SHA256 与回滚；其它未闭环文档保留"
+    }
+  ],
+  "coverage_summary": {
+    "lines": 86.56,
+    "branches": null,
+    "functions": 85.94,
+    "statements": null,
+    "note": "沿用 2026-10-24 core 覆盖率基线，不是本轮重跑结果；app 新增采样路径未统计"
+  },
+  "seams_touched": [
+    "S1 IPC payload",
+    "S7 前端 DOM",
+    "S8 前端错误与退避",
+    "S11 EC 锁与外部采样",
+    "S9 发布产物（待发布验证）"
+  ],
+  "mock_scenarios_covered": [
+    "ec_unavailable",
+    "no_battery",
+    "missing_gpu",
+    "missing_memory",
+    "curve_failure",
+    "curve_retry_backoff",
+    "diagnostics_metadata"
+  ],
+  "browser_validation": {
+    "performed": true,
+    "engine": "Playwright / Chromium（独立进程 + mock IPC）",
+    "paths": [
+      "overview",
+      "cooling",
+      "battery",
+      "advanced",
+      "ec_unavailable",
+      "curve_failure"
+    ],
+    "screenshots": [
+      "docs/screenshots/audit-cooling.png",
+      "docs/screenshots/audit-cooling-error.png",
+      "docs/screenshots/audit-advanced.png"
+    ]
+  },
+  "artifact": {
+    "path": "app/src-tauri/target/release/mechrevo-max.exe",
+    "size_bytes": 5395456,
+    "sha256": "dc2c0330c4f6e09e5a70e1917d4ae21d15381afb6973b2a3446ea8c6e2970e56",
+    "version": "0.5.1"
+  },
+  "limitations": [
+    "真实系统实际生效 PL（MSR）未实现；EC 默认 PL 不宣称是生效值",
+    "风扇曲线写入未开放，配对未与官方 UserFanTables 逐点核对",
+    "真实 GUI 与真实写入行为级验证受安全策略限制，本轮未执行",
+    "外部查询超时注入测试未做；实现了有界超时和失败降级，未声称已测出超时行为",
+    "0x751 当前为 0x00（强冷关），与早前 0x40 不同；不得继续宣称强冷为开",
+    "发布与 CI 尚未完成；本证据仅覆盖本地验证，后续另行核对 GitHub 结果"
+  ]
+}

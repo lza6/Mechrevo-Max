@@ -53,11 +53,19 @@ Tauri v2 桌面程序，界面用原生 HTML/CSS/JS（无打包器，构建链�
 ![界面](docs/screenshots/main.png)
 
 功能：
-- **运行档位**一键切换（办公 / 均衡 / 狂暴），带当前档位高亮与原始寄存器值显示
-- **实时读数**：CPU / GPU 风扇转速（2 秒轮询）、供电状态
-- **默认功耗墙**调节：PL1 / PL2 / PL4 滑块，游戏与办公分别配置
-- **一键撤销**：档位切换与功耗改动都可回退到改动前的快照
-- EC 不可用时给出明确的修复指引，权限不足时提供"以管理员身份重启"按钮
+- **分区工作台**：概览 / 系统监控 / 设备信息 / 电池 / 性能 / 风扇曲线 / 高级，共 7 页
+- **实时读数**：CPU/GPU 温度与风扇（EC，2 秒）；CPU/内存、GPU 功耗/频率/显存、SSD 健康与电池状态（免驱采集）
+- **运行档位**一键切换（办公 / 均衡 / 狂暴），带原始寄存器位域解释
+- **默认功耗墙**调节：PL1 / PL2 / PL4；同时展示**只读固件基线**，不把默认值冒充系统实际生效值
+- **强冷**、自定义配置（PL + 强冷）、寄存器只读浏览器与 CSV 导出、风扇曲线自动加载
+- **一键撤销**：档位、功耗、强冷分别回到改动前快照
+- 采样失败显示「无数据」，不把 `[N/A]`、缺字段或无电池伪造成 0；外部查询有 15 秒超时
+- EC 不可用时给出修复指引，免驱 CPU/内存等数据仍展示；权限不足时可提权重启
+
+### 风扇曲线边界
+
+当前只读展示 EC `0x0F00–0x0F5F` 的候选曲线表。官方 `UserFanTables` 未逐点核对前，**不会开放写入**；
+读取失败会退避，而不是每轮全量重试。
 
 ### 构建
 
@@ -103,7 +111,7 @@ workflow_status.md     工作状态台账
 ```bash
 # 核心库（离线，用 Mock 传输层）
 cd core
-cargo test                                    # 46 单测 + 1 doctest
+cargo test                                    # 单测 + doctest（数量随实现演进）
 cargo clippy --all-targets -- -D warnings     # 0 warning
 cargo test --test hardware -- --ignored --test-threads=1 --nocapture   # 真机测试（谨慎）
 
@@ -113,6 +121,17 @@ cargo test --bin mechrevo-max                 # IPC 层单测（锁/串行化/�
 cargo test --test ipc_contract                # 前后端契约（含解析 app.js 的 IPC 表）
 cargo build --release
 ```
+
+### 浏览器验收（不访问硬件）
+
+需要本机已有 `playwright-core` 和 Chrome。脚本只打开独立 Chromium，IPC 使用 mock，**不是硬件 E2E**：
+
+```bash
+node tools/qa_browser.cjs
+```
+
+若 Playwright 装在别处，设置 `PLAYWRIGHT_MODULE` 为 `playwright-core` 的目录；
+默认也会查找普通模块路径和本机已有的 `gsd-pi` 安装。断言和边界见 `docs/qa/ui-smoke-spec.md`。
 
 ### 前置条件：让 EC 设备就绪
 

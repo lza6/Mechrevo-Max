@@ -405,3 +405,65 @@ Office: PowerLimits { pl1: 45, pl2: 45, pl4: 200 }
 3. v0.3.0（blocked：需第二台机型）：寄存器档案外置 + 能力协商 + 未知机型安全降级
 4. 可选静态深化：反编译 `5.56.51.26` 版 SystrayComponent 对比差异；解析 `resources.pri`；
    `UserFanTables/PH6PG*` 与官方 profile 交叉比对建立机型映射表
+
+## 2026-10-25 · 终局审计与定向修复（执行中）
+
+### 技能检查记录
+
+- 已读：`AGENTS.md`、`project_specs.md`、`.agent/skills/project-audit-sop.md`、`code-review-checklist.md`、`.agent/memory/known-issues.md`、`verified-scope.md`、`policy.md`、`test_ledger.md`。
+- 缺失：`.wolf/OPENWOLF.md` / `cerebrum.md` / `anatomy.md` / `memory.md` / `buglog.json`；`.agent/skills/add-new-feature.md`。
+- 工具状态：仓库没有 `.codegraph/`，`code-review-graph` 无法连接；按工具返回改用 Read/Grep/graft。`reviewer` / `doc-auditor` 类型不存在，以独立 `claude` 代理承担同名只读职责。
+- 没有执行被禁止的 `scripts/e2e_ui.ps1`、CDP 真机脚本，不做压力测试。
+
+### 任务图
+
+| ID | 工作 | 验收 | 状态 |
+|---|---|---|---|
+| A-01 | 基线测试与独立审查 | 全量测试/审查清单 | doing（等待独立 reviewer） |
+| A-02 | 采样正确性与超时、EC 降级 | fixture + 前端路径 + lint | doing（定向修复完成，最终验证中） |
+| A-03 | 文档/计划/记忆/证据闭环 | 审计清单与证据一致 | doing（文档审计代理进行中） |
+| A-04 | release 构建、CI、发布 | 构建与真实 CI、Release 可复核 | todo（待 Approve） |
+
+### 已验证事实（按时间）
+
+- `cargo test --offline --bin mechrevo-max sysinfo::tests`：新边界测试加入后，当前修复下 **10/10 passed**。
+- `core` 使用明确可用的 `RUSTDOC=~/.rustup/toolchains/1.95.0-x86_64-pc-windows-msvc/bin/rustdoc.exe`：**70 passed + 1 doctest**；两个 crate 的 fmt/clippy 在对应命令中通过。
+- `app`：**31 passed**，`ipc_contract`：**8 passed**，严格 clippy 通过。
+- 独立 Chromium + 假 IPC 执行 `node tools/qa_browser.cjs`：**17/17 断言**，`errors=[]`；覆盖 EC 不可用保留免驱数据、无电池/未知 GPU/未知内存显示 `—`、曲线失败退避、诊断字段。
+- 脚手架修正（不是产品修复）：初始 mock 未提供首屏状态，导致 `waitForFunction` 超时；改为首屏注入有效状态。
+
+### 修复与回滚点
+
+| 文件 | 行为变化 | 回滚 |
+|---|---|---|
+| `core/src/ec/mod.rs` | `read_block` 拒绝越界和 u16 溢出，不再环绕；+2 单测 | `git checkout <before> -- core/src/ec/mod.rs` |
+| `app/src-tauri/src/sysinfo.rs` | 外部命令 15 秒超时；GPU `[N/A]` 返回 None；电池缺字段不伪造 0%；磁盘必需容量；失败缓存/未知态 | 同上 |
+| `app/src-tauri/src/main.rs` | 采样移至 EC 锁外，EC 失败/锁中毒仍保留免驱数据；版本与日志路径进 payload | 同上 |
+| `app/ui/app.js` | Option 数据前端安全显示；曲线失败 30 秒退避；版本/日志目录接通 | 同上 |
+| `tools/qa_browser.cjs` | 可复跑的独立 Chromium 验收，不访问硬件 | 删除文件即可（保留 mock 验收报告） |
+
+### 自反驳
+
+1. **“免驱数据”是否还会被 EC 拖住？** 初次修复仅把采样移到打开 EC 之前，仍持 EC 锁；复核后已移到锁外，锁中毒也返回采样。
+2. **使用 Option 是否真的杜绝假 0？** 电池 `percent`、内存两字段均改 Option；GPU 无效行拒绝；无电池不构造对象。前端测试覆盖未知值而非仅 Rust 字段。
+3. **当前版本是否完整替代官方？** 否。MUX、风扇曲线写入、系统实际生效 PL 尚未安全实现；不纳入本轮宣称。
+4. **独立审查是否已完成？** 否，后台代理未完成前不能写 Approve 或“全部任务完成”。
+
+### 独立审查（已完成）
+
+- 代码 reviewer：先 **Request Changes**，指出 `BatteryTemperature.Temperature` 的单位错误（2982 会显示约 298°C）。
+- 修复：按十分之一开尔文转 °C（`/10.0 - 273.15`），范围校验 + fixture；定向 `sysinfo::tests` **11 passed**，直接抽取并执行查询脚本得到合法 JSON，缺失温度 `null`。
+- 复验：**Approve**（限当前源码静态复核与已提供的测试证据；真实窗口/硬件行为不在批准范围）。
+- 文档 reviewer：扫描 **39 个已跟踪 Markdown**；有陈旧状态需纠正，**没有应删除的计划文档**。
+- 归档：`docs/计划书/闭环审计-20261024.md` 已复制至 `docs/archive/plans/20261025/`，`cmp` 一致，manifest 记录 SHA256 与回滚；原件移除。其它未闭环文档保留。
+- 结果：A-01 done；A-02 代码修复 done（后续完整验证后发布）；A-03 文档/记忆修复进行中；A-04 待构建/CI/Release。
+
+### 收尾验证与发布（2026-10-25）
+
+- 全量 core：**70 passed + 1 doctest**；严格 clippy / fmt 通过（rustdoc 显式使用 rustup 工具链真实路径，未跳过 doctest）。
+- 应用：**32 passed**；契约 **8 passed**；严格 clippy / fmt 通过。
+- 采样定向：**11 passed**；独立 Chromium + mock IPC：**21/21，errors=[]**。
+- release 0.5.1：`app/src-tauri/target/release/mechrevo-max.exe`，**5,395,456 B**，SHA256 `dc2c0330c4f6e09e5a70e1917d4ae21d15381afb6973b2a3446ea8c6e2970e56`。
+- 文档归档 manifest：`docs/archive/plans/20261025/archive-manifest.md`；历史审计保留可回滚副本。
+- 报告：`reports/change-report-2026-10-24.html` 第 13 节，5/5 自测（实际逐题核对）；HTML 标签配对通过。
+- 发布状态：本地验证和独立 Approve 已完成，开始提交/推送/CI/Release；**CI 未通过前不宣称远端发布验证完成**。

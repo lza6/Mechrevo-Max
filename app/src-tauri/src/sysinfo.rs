@@ -57,8 +57,8 @@ pub struct BatteryInfo {
     pub charging: bool,
     /// 是否正在放电.
     pub discharging: bool,
-    /// 当前电量 (%).
-    pub percent: u32,
+    /// 当前电量 (%)；容量不可知时为 `None`，绝不伪造 0%.
+    pub percent: Option<u32>,
     /// 剩余容量 (mWh).
     pub remaining_mwh: u32,
     /// 满充容量 (mWh).
@@ -112,10 +112,10 @@ pub struct DeviceInfo {
 pub struct SysSnapshot {
     /// CPU 使用率 (%).
     pub cpu_util_pct: Option<f32>,
-    /// 内存已用 (MB).
-    pub mem_used_mb: u64,
-    /// 内存总量 (MB).
-    pub mem_total_mb: u64,
+    /// 内存已用 (MB)；查询失败时为 `None`.
+    pub mem_used_mb: Option<u64>,
+    /// 内存总量 (MB)；查询失败时为 `None`.
+    pub mem_total_mb: Option<u64>,
     /// 内存使用率 (%).
     pub mem_used_pct: Option<f32>,
     /// GPU.
@@ -132,9 +132,22 @@ pub struct SysSnapshot {
 #[derive(Debug, Default)]
 pub struct SysSampler {
     cpu_prev: Mutex<Option<(u64, u64, u64)>>, // idle, kernel, user
-    gpu_cache: Mutex<Option<(Instant, GpuInfo)>>,
-    slow_cache: Mutex<Option<(Instant, SlowData)>>,
+    gpu_cache: Mutex<Option<GpuCacheEntry>>,
+    slow_cache: Mutex<Option<SlowCacheEntry>>,
     device: Mutex<Option<DeviceInfo>>,
+    slow_stale: std::sync::atomic::AtomicBool,
+}
+
+#[derive(Debug, Clone)]
+struct GpuCacheEntry {
+    at: Instant,
+    info: Option<GpuInfo>,
+}
+
+#[derive(Debug, Clone)]
+struct SlowCacheEntry {
+    at: Instant,
+    data: SlowData,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -145,16 +158,32 @@ struct SlowData {
 }
 
 impl SysSampler {
+    /// 最近一次慢速查询是否失败（前端据此标注“缓存数据”）.
+    pub fn slow_is_stale(&self) -> bool {
+        if self.slow_stale.load(std::sync::atomic::Ordering::Acquire) {
+            return true;
+        }
+        self.slow_cache
+            .lock()
+            .ok()
+            .and_then(|cache| {
+                cache
+                    .as_ref()
+                    .map(|entry| entry.at.elapsed() >= SLOW_REFRESH)
+            })
+            .unwrap_or(false)
+    }
+
     /// 采集一次（内部按需刷新缓存）.
     pub fn sample(&self) -> SysSnapshot {
-        let (mem_total_mb, mem_used_mb, mem_used_pct) = memory();
+        let (mem_total_mb, mem_used_mb, mem_used_pct) = memory().unwrap_or((0, 0, None));
         let slow = self.slow_data();
         let device = slow.device.clone().unwrap_or_default();
 
         SysSnapshot {
             cpu_util_pct: self.cpu_util(),
-            mem_used_mb,
-            mem_total_mb,
+            mem_used_mb: (mem_used_mb > 0).then_some(mem_used_mb),
+            mem_total_mb: (mem_total_mb > 0).then_some(mem_total_mb),
             mem_used_pct,
             gpu: self.gpu(),
             battery: slow.battery,
@@ -181,17 +210,17 @@ impl SysSampler {
 
     fn gpu(&self) -> Option<GpuInfo> {
         let mut guard = self.gpu_cache.lock().ok()?;
-        if let Some((at, info)) = guard.as_ref() {
-            if at.elapsed() < GPU_REFRESH {
-                return Some(info.clone());
+        if let Some(entry) = guard.as_ref() {
+            if entry.at.elapsed() < GPU_REFRESH {
+                return entry.info.clone();
             }
         }
-        if let Some(info) = query_gpu() {
-            *guard = Some((Instant::now(), info.clone()));
-            Some(info)
-        } else {
-            guard.as_ref().map(|(_, info)| info.clone())
-        }
+        let fresh = query_gpu();
+        *guard = Some(GpuCacheEntry {
+            at: Instant::now(),
+            info: fresh.clone(),
+        });
+        fresh
     }
 
     fn slow_data(&self) -> SlowData {
@@ -199,21 +228,34 @@ impl SysSampler {
             Ok(g) => g,
             Err(_) => return SlowData::default(),
         };
-        if let Some((at, data)) = guard.as_ref() {
-            if at.elapsed() < SLOW_REFRESH {
-                return data.clone();
+        if let Some(entry) = guard.as_ref() {
+            if entry.at.elapsed() < SLOW_REFRESH {
+                return entry.data.clone();
             }
         }
-        let fresh = query_slow();
+        let Some(fresh) = query_slow() else {
+            self.slow_stale
+                .store(true, std::sync::atomic::Ordering::Release);
+            log::warn!("慢速系统查询失败，保留上次采样");
+            return guard
+                .as_ref()
+                .map(|entry| entry.data.clone())
+                .unwrap_or_default();
+        };
         // 静态信息只取一次，避免每次都被空值覆盖
         let merged = SlowData {
             battery: fresh.battery,
             disk: fresh.disk,
             device: fresh
                 .device
-                .or_else(|| guard.as_ref().and_then(|(_, d)| d.device.clone())),
+                .or_else(|| guard.as_ref().and_then(|entry| entry.data.device.clone())),
         };
-        *guard = Some((Instant::now(), merged.clone()));
+        *guard = Some(SlowCacheEntry {
+            at: Instant::now(),
+            data: merged.clone(),
+        });
+        self.slow_stale
+            .store(false, std::sync::atomic::Ordering::Release);
         if let Ok(mut dev) = self.device.lock() {
             if dev.is_none() {
                 *dev = merged.device.clone();
@@ -228,7 +270,9 @@ impl SysSampler {
 #[cfg(windows)]
 mod imp {
     use super::{BatteryInfo, DeviceInfo, DiskInfo, GpuInfo};
-    use std::process::Command;
+    use std::process::{Command, Stdio};
+    use std::thread;
+    use std::time::{Duration, Instant};
     use windows_sys::Win32::Foundation::FILETIME;
     use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
     use windows_sys::Win32::System::Threading::GetSystemTimes;
@@ -256,7 +300,7 @@ mod imp {
         ))
     }
 
-    pub fn memory() -> (u64, u64, Option<f32>) {
+    pub fn memory() -> Option<(u64, u64, Option<f32>)> {
         // SAFETY: MEMORYSTATUSEX 是 POD 结构体，全零是合法初值；
         // dwLength 必须由调用方填成结构体实际大小。
         let mut status: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
@@ -264,53 +308,120 @@ mod imp {
         // SAFETY: dwLength 已按结构体实际大小填好，指针指向栈上有效结构体。
         let ok = unsafe { GlobalMemoryStatusEx(&mut status) };
         if ok == 0 {
-            return (0, 0, None);
+            return None;
         }
-        let total_mb = status.ullTotalPhys / (1024 * 1024);
-        let used_mb = (status.ullTotalPhys - status.ullAvailPhys) / (1024 * 1024);
+        let total_mb = Some(status.ullTotalPhys / (1024 * 1024));
+        let used_mb = Some((status.ullTotalPhys - status.ullAvailPhys) / (1024 * 1024));
         let pct = if status.ullTotalPhys > 0 {
             Some(status.dwMemoryLoad as f32)
         } else {
             None
         };
-        (total_mb, used_mb, pct)
+        Some((total_mb?, used_mb?, pct))
     }
 
-    /// 用 `nvidia-smi` 取 GPU 实时数据（不经过 EC）.
-    pub fn query_gpu() -> Option<GpuInfo> {
-        let out = Command::new(r"C:\Windows\System32\nvidia-smi.exe")
-            .args([
-                "--query-gpu=name,utilization.gpu,utilization.memory,temperature.gpu,clocks.current.graphics,clocks.current.memory,power.draw,memory.used,memory.total",
-                "--format=csv,noheader,nounits",
-            ])
-            .output()
-            .ok()?;
-        if !out.status.success() {
-            return None;
+    const EXTERNAL_TIMEOUT: Duration = Duration::from_secs(15);
+
+    #[cfg(windows)]
+    fn terminate_pid(pid: u32) {
+        use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess};
+        const PROCESS_TERMINATE: u32 = 0x0001;
+        // SAFETY: pid 来自本函数创建的子进程；OpenProcess 只用于请求终止，
+        // 失败时返回空句柄，不调用任何后续 API。这里不持有该句柄以外的资源。
+        unsafe {
+            let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+            if !handle.is_null() {
+                let _ = TerminateProcess(handle, 1);
+            }
         }
-        let text = String::from_utf8_lossy(&out.stdout);
-        let line = text.lines().next()?;
+    }
+
+    #[cfg(not(windows))]
+    fn terminate_pid(_pid: u32) {}
+
+    /// 执行只读外部命令，并设置硬超时。
+    ///
+    /// 无超时查询不能放在状态轮询或 EC 互斥里：进程卡住会拖住整条状态链。
+    fn run_bounded(program: &str, args: &[&str]) -> Option<std::process::Output> {
+        let mut child = Command::new(program)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .ok()?;
+        let child_pid = child.id();
+        let deadline = Instant::now() + EXTERNAL_TIMEOUT;
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => {
+                    return match child.wait_with_output() {
+                        Ok(output) => Some(output),
+                        Err(e) => {
+                            log::warn!("回收外部查询失败 {program}: {e}");
+                            terminate_pid(child_pid);
+                            None
+                        }
+                    };
+                }
+                Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(50)),
+                Ok(None) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    log::warn!(
+                        "外部查询超时（{} 秒）: {program}",
+                        EXTERNAL_TIMEOUT.as_secs()
+                    );
+                    return None;
+                }
+                Err(e) => {
+                    log::warn!("查询进程状态失败 {program}: {e}");
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
+                }
+            }
+        }
+    }
+
+    /// `nvidia-smi` 的 CSV 行解析器。任一字段异常都返回 `None`，不以 0 填充。
+    pub(super) fn parse_gpu_row(line: &str) -> Option<GpuInfo> {
         let f: Vec<&str> = line.split(',').map(str::trim).collect();
-        if f.len() < 9 {
+        if f.len() != 9 || f[0].is_empty() {
             return None;
         }
         Some(GpuInfo {
             name: f[0].to_owned(),
-            util_pct: f[1].parse().unwrap_or(0),
-            mem_util_pct: f[2].parse().unwrap_or(0),
-            temp_c: f[3].parse().unwrap_or(0),
-            clock_mhz: f[4].parse().unwrap_or(0),
-            mem_clock_mhz: f[5].parse().unwrap_or(0),
-            power_w: f[6].parse().unwrap_or(0.0),
-            vram_used_mb: f[7].parse().unwrap_or(0),
-            vram_total_mb: f[8].parse().unwrap_or(0),
+            util_pct: f[1].parse().ok()?,
+            mem_util_pct: f[2].parse().ok()?,
+            temp_c: f[3].parse().ok()?,
+            clock_mhz: f[4].parse().ok()?,
+            mem_clock_mhz: f[5].parse().ok()?,
+            power_w: f[6].parse().ok()?,
+            vram_used_mb: f[7].parse().ok()?,
+            vram_total_mb: f[8].parse().ok()?,
         })
+    }
+
+    /// 用 `nvidia-smi` 取 GPU 实时数据（不经过 EC）.
+    pub fn query_gpu() -> Option<GpuInfo> {
+        let out = run_bounded(
+            r"C:\Windows\System32\nvidia-smi.exe",
+            &[
+                "--query-gpu=name,utilization.gpu,utilization.memory,temperature.gpu,clocks.current.graphics,clocks.current.memory,power.draw,memory.used,memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+        )?;
+        if !out.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&out.stdout);
+        parse_gpu_row(text.lines().next()?)
     }
 
     const PS: &str = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
 
     /// 电池 + SSD + 静态信息，一次 PowerShell 取齐（约 300 ms，60 s 一次）.
-    pub fn query_slow() -> super::SlowData {
+    pub fn query_slow() -> Option<super::SlowData> {
         let script = r#"
 $ErrorActionPreference='SilentlyContinue'
 $fc = Get-CimInstance -Namespace root/WMI -ClassName BatteryFullChargedCapacity | Select-Object -First 1
@@ -322,13 +433,17 @@ $pd = Get-PhysicalDisk | Select-Object -First 1
 $rc = if ($pd) { Get-StorageReliabilityCounter -PhysicalDisk $pd } else { $null }
 $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
 $os = Get-CimInstance Win32_OperatingSystem | Select-Object -First 1
+$batteryTempC = if ($bt -and $bt.Temperature -gt 0) {
+  $value = [double]$bt.Temperature / 10.0 - 273.15
+  if ($value -ge -40 -and $value -le 150) { [math]::Round($value) } else { $null }
+} else { $null }
 [pscustomobject]@{
   battery = [pscustomobject]@{
     on_ac = [bool]$bs.PowerOnline; charging = [bool]$bs.Charging; discharging = [bool]$bs.Discharging
     remaining_mwh = [int]$bs.RemainingCapacity; full_mwh = [int]$fc.FullChargedCapacity
     design_mwh = [int]$sd.DesignedCapacity; voltage_mv = [int]$bs.Voltage
     cycles = if ($cc -and $cc.CycleCount -gt 0) { [int]$cc.CycleCount } else { $null }
-    temp_c = if ($bt -and $bt.Temperature -gt 0 -and $bt.Temperature -lt 1000) { [int]($bt.Temperature/10) } else { $null }
+    temp_c = $batteryTempC
   }
   disk = if ($pd) { [pscustomobject]@{
     model = $pd.FriendlyName; size_gb = [int]($pd.Size/1GB); health = [string]$pd.HealthStatus
@@ -342,15 +457,12 @@ $os = Get-CimInstance Win32_OperatingSystem | Select-Object -First 1
   }
 } | ConvertTo-Json -Depth 4 -Compress
 "#;
-        let out = match Command::new(PS)
-            .args(["-NoProfile", "-NonInteractive", "-Command", script])
-            .output()
-        {
-            Ok(o) if o.status.success() => o,
-            _ => return super::SlowData::default(),
-        };
+        let out = run_bounded(PS, &["-NoProfile", "-NonInteractive", "-Command", script])?;
+        if !out.status.success() {
+            return None;
+        }
         let text = String::from_utf8_lossy(&out.stdout);
-        parse_slow(text.trim())
+        Some(parse_slow(text.trim()))
     }
 
     pub(super) fn parse_slow(json: &str) -> super::SlowData {
@@ -362,42 +474,36 @@ $os = Get-CimInstance Win32_OperatingSystem | Select-Object -First 1
             v.get(k).and_then(|x| x.as_u64()).map(|x| x as u32)
         };
 
-        let battery = value
-            .get("battery")
-            .filter(|b| !b.is_null())
-            .map(|b| BatteryInfo {
-                on_ac: b
-                    .get("on_ac")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false),
-                charging: b
-                    .get("charging")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false),
-                discharging: b
-                    .get("discharging")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false),
-                percent: 0,
-                remaining_mwh: u32_of(b, "remaining_mwh").unwrap_or(0),
-                full_mwh: u32_of(b, "full_mwh").unwrap_or(0),
+        let battery = value.get("battery").filter(|b| !b.is_null()).and_then(|b| {
+            let info = BatteryInfo {
+                on_ac: b.get("on_ac").and_then(serde_json::Value::as_bool)?,
+                charging: b.get("charging").and_then(serde_json::Value::as_bool)?,
+                discharging: b.get("discharging").and_then(serde_json::Value::as_bool)?,
+                percent: None,
+                remaining_mwh: u32_of(b, "remaining_mwh")?,
+                full_mwh: u32_of(b, "full_mwh")?,
                 design_mwh: u32_of(b, "design_mwh").unwrap_or(0),
-                voltage_mv: u32_of(b, "voltage_mv").unwrap_or(0),
+                voltage_mv: u32_of(b, "voltage_mv")?,
                 cycles: u32_of(b, "cycles"),
                 temp_c: u32_of(b, "temp_c"),
                 charge_limit_pct: None,
-            });
+            };
+            // 有 BatteryStatus 类并不等于有电池：虚拟机可能给全零容量。
+            // 保留电源连接状态，但拒绝伪造成“0% 电池”。
+            (info.full_mwh > 0 && info.voltage_mv > 0).then_some(info)
+        });
 
-        let disk = value
-            .get("disk")
-            .filter(|d| !d.is_null())
-            .map(|d| DiskInfo {
+        let disk = value.get("disk").filter(|d| !d.is_null()).and_then(|d| {
+            // 空的 WMI 对象不代表磁盘存在；容量是缺失字段时的必要事实。
+            let size_gb = d.get("size_gb").and_then(|x| x.as_u64())?;
+            (size_gb > 0).then_some(DiskInfo {
                 model: d
                     .get("model")
                     .and_then(|x| x.as_str())
                     .unwrap_or("")
+                    .trim()
                     .to_owned(),
-                size_gb: d.get("size_gb").and_then(|x| x.as_u64()).unwrap_or(0),
+                size_gb,
                 health: d
                     .get("health")
                     .and_then(|x| x.as_str())
@@ -406,7 +512,8 @@ $os = Get-CimInstance Win32_OperatingSystem | Select-Object -First 1
                 temp_c: u32_of(d, "temp_c"),
                 temp_max_c: u32_of(d, "temp_max_c"),
                 wear_pct: u32_of(d, "wear_pct"),
-            });
+            })
+        });
 
         let device = value
             .get("device")
@@ -445,16 +552,16 @@ fn system_times() -> Option<(u64, u64, u64)> {
     None
 }
 #[cfg(not(windows))]
-fn memory() -> (u64, u64, Option<f32>) {
-    (0, 0, None)
+fn memory() -> Option<(u64, u64, Option<f32>)> {
+    None
 }
 #[cfg(not(windows))]
 fn query_gpu() -> Option<GpuInfo> {
     None
 }
 #[cfg(not(windows))]
-fn query_slow() -> SlowData {
-    SlowData::default()
+fn query_slow() -> Option<SlowData> {
+    None
 }
 
 #[cfg(test)]
@@ -463,10 +570,9 @@ mod tests {
 
     #[test]
     fn memory_returns_plausible_numbers() {
-        let (total, used, pct) = memory();
-        if total == 0 {
+        let Some((total, used, pct)) = memory() else {
             return; // 非 Windows 或调用失败：跳过
-        }
+        };
         assert!(total > 1024, "内存总量应 > 1 GB，实际 {total} MB");
         assert!(used <= total, "已用不得大于总量");
         assert!(pct.unwrap_or(0.0) <= 100.0);
@@ -517,6 +623,56 @@ mod tests {
         assert_eq!(dev.cpu_threads, 24);
         assert_eq!(dev.cpu_cores, 16);
         assert!(dev.os.contains("Windows"));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn absent_battery_stays_absent_even_when_class_exists() {
+        let data = imp::parse_slow(
+            r#"{"battery":{"on_ac":false,"charging":false,"discharging":false,"remaining_mwh":0,"full_mwh":0,"design_mwh":0,"voltage_mv":0}}"#,
+        );
+        assert!(
+            data.battery.is_none(),
+            "WMI 类存在但容量全 0 不代表有电池，不能伪造成 0% 电量"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn valid_disk_survives_missing_battery() {
+        let data = imp::parse_slow(
+            r#"{"battery":{"remaining_mwh":0,"full_mwh":0,"voltage_mv":0},"disk":{"model":"Virtual Disk","size_gb":64,"health":"Healthy","temp_c":null}}"#,
+        );
+        assert!(data.battery.is_none());
+        assert_eq!(data.disk.expect("磁盘仍应保留").size_gb, 64);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn invalid_gpu_row_is_rejected_not_zeroed() {
+        assert!(imp::parse_gpu_row("GeForce,[N/A],[N/A],40,210,405,5.91,1288,8188").is_none());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn battery_temperature_decikelvin_becomes_celsius() {
+        let raw = 2982.0_f64;
+        let celsius = raw / 10.0 - 273.15;
+        assert!((-40.0..=150.0).contains(&celsius));
+        assert_eq!(celsius.round() as i32, 25);
+
+        let invalid = 0.0_f64 / 10.0 - 273.15;
+        assert!(!(-40.0..=150.0).contains(&invalid));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn valid_gpu_row_is_parsed() {
+        let gpu = imp::parse_gpu_row("RTX 4060,4,22,40,210,405,5.91,1288,8188")
+            .expect("有效 GPU 行应解析");
+        assert_eq!(gpu.util_pct, 4);
+        assert_eq!(gpu.temp_c, 40);
+        assert_eq!(gpu.power_w, 5.91);
     }
 
     /// 真机冒烟：只保证「跑得通、不 panic」，不对具体硬件下断言。

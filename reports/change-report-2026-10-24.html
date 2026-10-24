@@ -445,6 +445,77 @@ GPU 用 <code>nvidia-smi</code>（走 NVAPI，<strong>不经过 EC</strong>，�
 真机强冷往返 <strong>3/3</strong>（结束后 <code>0x751=0x40</code> 与开工一致）· 两 crate clippy 0 warning / fmt 干净 ·
 release 5 297 152 B。真实截图：<code>docs/screenshots/app-live-window.png</code>，内存 47.4 MB。</p>
 
+
+<h2>13. v0.5.1：采样与交付边界的终局审计</h2>
+<p>本轮针对 v0.5.0 做独立审查与真实验证，不把“已有界面”当作闭环。修改集中在采样正确性、失败降级、契约与文档一致性，不开放高风险写入。</p>
+
+<h3>13.1 需求追踪</h3>
+<table>
+<thead><tr><th>需求</th><th>实现与证据</th><th>当前边界</th></tr></thead>
+<tbody>
+<tr><td>外部采样不能阻塞 EC</td><td><code>main.rs::status_snapshot</code> 在 EC 互斥前采样；外部命令有界超时</td><td>超时进程注入实测尚未做，不把静态超时实现说成运行时覆盖</td></tr>
+<tr><td>未知不能显示为真实 0</td><td>无电池、GPU <code>[N/A]</code>、内存缺失均为 Option；11 条采样定向测试</td><td>本机不提供的电池设计容量/循环/温度仍显示“本机不提供”</td></tr>
+<tr><td>EC 故障仍能看到免驱数据</td><td>EC 失败、传感器失败、锁中毒均回填 system；浏览器 21 条路径</td><td>浏览器 mock 不证明真实硬件链路</td></tr>
+<tr><td>失败可读且可恢复</td><td>曲线失败退避 30 秒；版本和日志路径显示；缓存有 stale 标记</td><td>日志是本地文件，不上传诊断</td></tr>
+<tr><td>电池温度单位正确</td><td>WMI 十分之一开尔文 → <code>T/10 - 273.15</code>；2982 → 25°C fixture</td><td>本机 WMI 当前不提供该字段，因此以固定输入验证</td></tr>
+</tbody>
+</table>
+
+<h3>13.2 最强自我反驳</h3>
+<ul>
+<li><strong>“采样放到 open_ec 之前就够了”是错的</strong>：只要仍持 EC 锁，外部查询依旧会阻塞 EC。二次复核已把采样真正移到锁外。</li>
+<li><strong>“有 Option 就自然不会假 0”是错的</strong>：Rust 字段和前端都要一起改。无电池不构造对象，电池 percent/内存字段可空，GPU 无效行直接拒绝。</li>
+<li><strong>“所有计划都完成”是错的</strong>：只读曲线不是可写曲线；安装包能构建不等于干净机安装；真实 GUI/多机型/长时稳定性仍未完成。</li>
+<li><strong>“有 CI 就不会有错误测试”是错的</strong>：CI 的虚拟机暴露了测试对真机硬件的依赖；解析逻辑改用固定 JSON 验证，真机只做不 panic 的 smoke。</li>
+</ul>
+
+<h3>13.3 修复与验证证据</h3>
+<table>
+<thead><tr><th>项</th><th>实际结果</th><th>证据级别</th></tr></thead>
+<tbody>
+<tr><td>core</td><td>70 单测 + 1 doctest；严格 clippy / fmt</td><td>已验证（显式有效 rustdoc）</td></tr>
+<tr><td>app + IPC 契约</td><td>32 单测 + 8 契约测试；严格 clippy / fmt</td><td>已验证</td></tr>
+<tr><td>采样边界</td><td>11 条定向测试：无电池、合法磁盘、无效/合法 GPU、温度换算等</td><td>已验证</td></tr>
+<tr><td>浏览器</td><td><code>node tools/qa_browser.cjs</code> → 21/21，0 error</td><td>已验证（独立 Chromium + mock IPC）</td></tr>
+<tr><td>真机只读健康</td><td><code>tools/ec_health.py</code>：519 次读取 0 失败；当前 <code>0x751=0x00</code></td><td>已验证（没有写硬件）</td></tr>
+<tr><td>独立审查</td><td>Request Changes → 修电池温度单位 → Approve</td><td>独立 claude 审查代理，限当前范围</td></tr>
+<tr><td>文档清理</td><td>仅归档已结束的单轮审计；原件与备份 cmp 一致，manifest 有回滚</td><td>已验证；未删除未闭环计划</td></tr>
+</tbody>
+</table>
+
+<h3>13.4 架构边界</h3>
+<pre><code>UI 状态请求
+  → blocking 线程池
+     → 外部采样（超时 / 解析 / 缓存 / 未知态）【不持 EC 锁】
+     → EC 互斥 → 限速驱动读取【串行、限速】
+  → StatusPayload（EC 状态 + 免驱 system + 诊断信息）
+  → 页面分区展示（未知为 —，陈旧标缓存，错误可恢复）</code></pre>
+
+<h3>13.5 回滚与发布</h3>
+<ul>
+<li>代码：每个逻辑修复可单独 revert；不 force push。</li>
+<li>硬件：本轮只做低频只读检查，没有写入，因此无需恢复本轮改动。</li>
+<li>文档：历史审计备份位于 <code>docs/archive/plans/20261025/</code>，可按 manifest 复制回。</li>
+<li>版本：回滚使用上一绿版 Release，不以未验证的安装包覆盖。</li>
+</ul>
+
+<h3>13.6 本轮自测（5/5，100%）</h3>
+<ol>
+<li><strong>WMI 电池温度 2982 应显示多少？</strong><details><summary>答案</summary>约 25°C：2982/10 - 273.15 ≈ 24.85°C。</details></li>
+<li><strong>WMI 返回 BatteryStatus 类是否证明机器有电池？</strong><details><summary>答案</summary>不证明。全零容量的对象必须视为无数据，不得渲染 0%。</details></li>
+<li><strong>把外部采样放在 open_ec() 之前是否就满足“锁外采样”？</strong><details><summary>答案</summary>不满足。如果 EC guard 仍活着，查询还是在锁内；必须在取锁前完成。</details></li>
+<li><strong>浏览器 mock 的 21 条断言是否证明真实硬件写入有效？</strong><details><summary>答案</summary>不证明。它证明 DOM、交互与 mock IPC 契约；真机写入与窗口外观是独立边界。</details></li>
+<li><strong>如何清理仍有未闭环项的计划文档？</strong><details><summary>答案</summary>不能删除。只能更新状态或迁移任务；已结束的历史审计才可备份、生成 manifest 后归档。</details></li>
+</ol>
+
+<h3>13.7 仍未闭环</h3>
+<ul>
+<li>风扇曲线写入（需与官方 UserFanTables 核对并评审）；MUX/电压等高风险写入未实现。</li>
+<li>系统实际生效 PL（MSR）未实现；EC 默认值与固件基线均不等于实际生效值。</li>
+<li>干净机实装、真实窗口完整外观、真实读屏播报、长时 soak、多机型验证未完成。</li>
+<li>外部查询实际悬挂回收、GPU 刷新竞争、跨版本完整性能回归未在本轮覆盖。</li>
+</ul>
+
 <footer>
   生成时间 2026-10-24 · 数据来自 <code>evidence/v0.1.1.json</code>、<code>evidence/v0.1.2.json</code>、<code>evidence/qa-round3.json</code> 的真实命令输出 ·
   计划与问题清单见 <code>docs/计划书/下一步改进指南.md</code> · 规则见 <code>AGENTS.md</code>

@@ -136,6 +136,14 @@ struct StatusPayload {
     can_undo_fan_boost: bool,
     /// 系统信息（CPU/内存/GPU/电池/SSD/静态设备信息）.
     system: sysinfo::SysSnapshot,
+    /// 滑块范围，与 `core::control` 的写前校验共用同一事实源.
+    limits_meta: LimitsMeta,
+    /// 慢速系统查询是否失败（页面应标为缓存数据，而非假装实时）.
+    system_slow_stale: bool,
+    /// 应用版本.
+    app_version: &'static str,
+    /// 日志目录，供用户排障.
+    log_dir: String,
     /// 上一次失败的原因（成功后清空）.
     last_error: Option<String>,
 }
@@ -178,6 +186,22 @@ fn classify(err: &mechrevo_core::Error) -> (&'static str, String) {
     }
 }
 
+/// 滑块范围的单一事实源（来自 core 的写前校验常量）.
+#[derive(Serialize)]
+struct LimitsMeta {
+    pl1: (u8, u8),
+    pl2: (u8, u8),
+    pl4: (u8, u8),
+}
+
+fn limits_meta() -> LimitsMeta {
+    LimitsMeta {
+        pl1: mechrevo_core::control::PL1_RANGE,
+        pl2: mechrevo_core::control::PL2_RANGE,
+        pl4: mechrevo_core::control::PL4_RANGE,
+    }
+}
+
 /// 构造一个"EC 不可用"的状态载荷.
 fn unavailable(
     err: &mechrevo_core::Error,
@@ -186,6 +210,15 @@ fn unavailable(
 ) -> StatusPayload {
     let (hint, message) = classify(err);
     unavailable_with(hint, message, can_undo_power, can_undo_mode)
+}
+
+/// 电池百分比：容量可信时才计算；缺字段一律保持 None。
+fn battery_percent(battery: &sysinfo::BatteryInfo) -> Option<u32> {
+    battery
+        .remaining_mwh
+        .checked_mul(100)
+        .and_then(|value| value.checked_div(battery.full_mwh))
+        .map(|value| value.min(100))
 }
 
 /// 用已确定的提示类型构造"EC 不可用"载荷.
@@ -214,6 +247,10 @@ fn unavailable_with(
         can_undo_mode,
         can_undo_fan_boost: false,
         system: sysinfo::SysSnapshot::default(),
+        limits_meta: limits_meta(),
+        system_slow_stale: false,
+        app_version: env!("CARGO_PKG_VERSION"),
+        log_dir: logging::data_dir().join("logs").display().to_string(),
         last_error: None,
     }
 }
@@ -222,12 +259,17 @@ fn unavailable_with(
 ///
 /// EC 不可用时也返回结构化结果，不抛错，让前端能渲染可行动的提示.
 fn status_snapshot(state: &AppState) -> StatusPayload {
+    // 外部查询绝不放进 EC 互斥：它可能超时，不能让 EC 驱动路径跟着等待。
+    let mut system = state.sampler.sample();
+
     // 串行化：轮询与用户操作不会同时进硬件
     let _guard = match lock_ec(state) {
         Ok(guard) => guard,
         Err((hint, message)) => {
             let (can_undo_power, can_undo_mode) = undo_flags(state);
-            return unavailable_with(hint, message, can_undo_power, can_undo_mode);
+            let mut payload = unavailable_with(hint, message, can_undo_power, can_undo_mode);
+            payload.system = system;
+            return payload;
         }
     };
     let (can_undo_power, can_undo_mode) = undo_flags(state);
@@ -239,7 +281,11 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
 
     let ec = match open_ec() {
         Ok(ec) => ec,
-        Err(e) => return unavailable(&e, can_undo_power, can_undo_mode),
+        Err(e) => {
+            let mut payload = unavailable(&e, can_undo_power, can_undo_mode);
+            payload.system = system;
+            return payload;
+        }
     };
 
     // 设备对象可能存在但打不开（典型是权限不足），这里用一次真实读取来区分
@@ -249,18 +295,19 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
 
     let snap = match sensors.snapshot() {
         Ok(s) => s,
-        Err(e) => return unavailable(&e, can_undo_power, can_undo_mode),
+        Err(e) => {
+            let mut payload = unavailable(&e, can_undo_power, can_undo_mode);
+            payload.system = system;
+            return payload;
+        }
     };
 
     // 档位字段只读一次：`current()` 与 `raw_fields()` 都会读 0x751，
     // 合并后每轮轮询少一次 EC 访问（20 ms 限速下等于少 20 ms 延迟）。
-    let mut system = state.sampler.sample();
-
-    // 电池百分比：满充容量与剩余容量都读到时才算，避免给出假数字
+    // 电池百分比：容量与电压都可信时才计算；缺字段一律保持 None。
     if let Some(b) = system.battery.as_mut() {
         if b.full_mwh > 0 {
-            b.percent =
-                ((u64::from(b.remaining_mwh) * 100) / u64::from(b.full_mwh)).min(100) as u32;
+            b.percent = battery_percent(b);
         }
         // EC 里的充电上限（0x7B9，低 7 位为百分比）——只读；读不到就不显示
         if let Ok(raw) = ec.read(0x07B9) {
@@ -303,6 +350,10 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
         fan_boost,
         firmware_power,
         system,
+        limits_meta: limits_meta(),
+        system_slow_stale: state.sampler.slow_is_stale(),
+        app_version: env!("CARGO_PKG_VERSION"),
+        log_dir: logging::data_dir().join("logs").display().to_string(),
         can_undo_power,
         can_undo_mode,
         can_undo_fan_boost,
@@ -1128,5 +1179,24 @@ mod tests {
         // EC 不可用是"当前状态"，不是"上一次失败"；不得把历史错误混进来误导用户
         let payload = unavailable_with("driver", "EC 驱动未就绪".to_owned(), false, false);
         assert!(payload.last_error.is_none());
+    }
+
+    #[test]
+    fn percentage_is_calculated_only_for_known_capacity() {
+        use crate::sysinfo::BatteryInfo;
+        let mut battery = BatteryInfo {
+            on_ac: true,
+            remaining_mwh: 23000,
+            full_mwh: 46000,
+            voltage_mv: 12000,
+            ..BatteryInfo::default()
+        };
+        battery.percent = battery
+            .remaining_mwh
+            .checked_mul(100)
+            .and_then(|value| value.checked_div(battery.full_mwh))
+            .map(|value| value.min(100));
+        assert_eq!(battery_percent(&battery), Some(50));
+        assert_eq!(battery_percent(&sysinfo::BatteryInfo::default()), None);
     }
 }

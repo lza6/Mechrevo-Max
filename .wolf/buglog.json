@@ -1,0 +1,62 @@
+[
+  {
+    "id": "bug-001",
+    "timestamp": "2026-10-25T04:30:00+08:00",
+    "error_message": "EC 不可用时免驱 CPU/内存也被清空；外部查询可能无限等待；N/A 被解析为 0。",
+    "file": "app/src-tauri/src/main.rs; app/src-tauri/src/sysinfo.rs; app/ui/app.js",
+    "root_cause": "把不同可靠性的采样合并为同一状态；EC 锁内执行外部查询；错误处理默认 0。",
+    "fix": "采样移到 EC 锁外；外部命令有界超时；未知值 Option 化；EC 失败仍返回免驱信息；前端显示未知。",
+    "tags": ["sampling", "ec", "timeout", "unknown-values"],
+    "related_bugs": [],
+    "occurrences": 1,
+    "last_seen": "2026-10-25T04:30:00+08:00"
+  },
+  {
+    "id": "bug-002",
+    "timestamp": "2026-10-25T04:35:00+08:00",
+    "error_message": "read_block 使用 wrapping_add，越过 EC 上界时静默回绕。",
+    "file": "core/src/ec/mod.rs",
+    "root_cause": "连续读直接对地址执行 wrapping_add，没有契约边界校验。",
+    "fix": "checked_add 计算末尾并限制到 EC_MAX_ADDR + 1；新增越界与上界测试。",
+    "tags": ["ec", "bounds", "read_block"],
+    "related_bugs": [],
+    "occurrences": 1,
+    "last_seen": "2026-10-25T04:35:00+08:00"
+  },
+  {
+    "id": "bug-003",
+    "timestamp": "2026-10-25T04:45:00+08:00",
+    "error_message": "独立审查：电池 WMI 温度 2982 被错误显示为约 298°C。",
+    "file": "app/src-tauri/src/sysinfo.rs",
+    "root_cause": "BatteryTemperature.Temperature 为十分之一开尔文，原代码仅除以 10，未减 273.15。",
+    "fix": "按 /10.0 - 273.15 转 °C 并做 -40..150°C 校验；新增 2982→25 fixture。",
+    "tags": ["battery", "units", "wmi", "review"],
+    "related_bugs": ["bug-001"],
+    "occurrences": 1,
+    "last_seen": "2026-10-25T04:45:00+08:00"
+  },
+  {
+    "id": "bug-004",
+    "timestamp": "2026-10-25T04:50:00+08:00",
+    "error_message": "完整 cargo test 因 Chocolatey rustdoc shim 指向不存在的 rustdoc.exe 失败。",
+    "file": "toolchain (not project code)",
+    "root_cause": "PATH 中失效 shim 优先于 rustup 管理的工具链。",
+    "fix": "验证命令显式设置 RUSTDOC 为 rustup 工具链内的真实 rustdoc.exe；未跳过 doctest。",
+    "tags": ["toolchain", "rustdoc", "verification"],
+    "related_bugs": [],
+    "occurrences": 1,
+    "last_seen": "2026-10-25T04:50:00+08:00"
+  },
+  {
+    "id": "bug-005",
+    "timestamp": "2026-10-25T04:55:00+08:00",
+    "error_message": "浏览器验收初始卡在“正在检测 EC”，随后 dialog 用例报 already handled。",
+    "file": "tools/qa_browser.cjs",
+    "root_cause": "首屏 mock 状态未在 addInitScript 提供；全局 accept 与 dismiss 冲突。",
+    "fix": "首屏注入有效状态；每个确认用例独立 accept/dismiss；恢复并增加断言。",
+    "tags": ["qa", "playwright", "mock", "dialog"],
+    "related_bugs": [],
+    "occurrences": 1,
+    "last_seen": "2026-10-25T04:55:00+08:00"
+  }
+]

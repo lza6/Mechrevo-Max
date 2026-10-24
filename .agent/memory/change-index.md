@@ -1,5 +1,16 @@
 # 变更索引（文件 → 行为）
 
+## v0.5.1（2026-10-25，采样与交付边界修复）
+| 文件 | 行为变化 |
+|---|---|
+| `app/src-tauri/src/sysinfo.rs` | 外部查询 15 秒超时与回收；无电池/无效 GPU/未知内存不伪造 0；电池温度单位转换；失败缓存标注 |
+| `app/src-tauri/src/main.rs` | 采样移出 EC 锁；EC 失败仍返回免驱数据；版本/日志路径/范围元数据进 payload |
+| `app/ui/app.js` | 未知值显示 `—`；曲线失败退避；危险写入二次确认；范围来自 core |
+| `core/src/ec/mod.rs` | `read_block` 禁止越界/地址环绕，新增边界测试 |
+| `tools/qa_browser.cjs` | 可复跑的独立 Chromium + mock IPC 验收（21 条），不访问硬件 |
+| `docs/`、`.agent/`、`.wolf/` | ADR、技能、bug 记录、历史状态纠偏、归档与 manifest |
+
+
 ## v0.1.3（2026-10-24，执行线程修正）
 | 文件 | 行为变化 |
 |---|---|

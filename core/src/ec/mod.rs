@@ -91,12 +91,21 @@ impl<T: EcTransport> Ec<T> {
     /// # Errors
     /// 任一地址读取失败即返回错误.
     pub fn read_block(&self, start: u16, len: u16) -> Result<Vec<u8>> {
-        (0..len)
-            .map(|i| {
-                let addr = start.wrapping_add(i);
-                self.read(addr)
-            })
-            .collect()
+        let end = start.checked_add(len).ok_or(Error::OutOfRange {
+            field: "read_block end",
+            value: i32::from(start) + i32::from(len),
+            min: 0,
+            max: i32::from(EC_MAX_ADDR) + 1,
+        })?;
+        if end > EC_MAX_ADDR.saturating_add(1) {
+            return Err(Error::OutOfRange {
+                field: "read_block end",
+                value: i32::from(end),
+                min: 0,
+                max: i32::from(EC_MAX_ADDR) + 1,
+            });
+        }
+        (start..end).map(|addr| self.read(addr)).collect()
     }
 
     /// 写 1 字节, 并读回校验.
@@ -257,6 +266,24 @@ fn now_unix() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_block_rejects_out_of_range_without_wrapping() {
+        let ec = Ec::new(MockTransport::new());
+        let err = ec.read_block(EC_MAX_ADDR, 2).unwrap_err();
+        assert!(matches!(err, Error::OutOfRange { .. }));
+        let err = ec.read_block(u16::MAX, 2).unwrap_err();
+        assert!(matches!(err, Error::OutOfRange { .. }));
+    }
+
+    #[test]
+    fn read_block_accepts_exact_upper_boundary() {
+        let t = MockTransport::new();
+        t.seed(EC_MAX_ADDR - 1, 0xAA);
+        t.seed(EC_MAX_ADDR, 0xBB);
+        let ec = Ec::new(t);
+        assert_eq!(ec.read_block(EC_MAX_ADDR - 1, 2).unwrap(), [0xAA, 0xBB]);
+    }
 
     #[test]
     fn writes_and_reads_back() {

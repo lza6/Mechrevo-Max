@@ -30,6 +30,7 @@ const TEMP_HOT = 80;
 const MAX_EC_ADDR = 0x0fff;
 const MAX_REG_QUERY = 64;
 const CURVE_REFRESH_MS = 60000;
+const CURVE_RETRY_MS = 30000;
 
 const el = (id) => document.getElementById(id);
 
@@ -139,6 +140,8 @@ const stats = { samples: 0, lastAt: null, lastGapMs: null, byKey: {} };
 let lastStatus = null;
 let lastRegRead = null;
 let curvesLoadedAt = 0;
+let curveRetryAfter = 0;
+let limitsSynced = false;
 let activePowerMode = 'gaming';
 let baseline = { gaming: null, office: null };
 let ecReady = false;
@@ -221,7 +224,7 @@ function renderOverview(s) {
   putGauge(ui.gGpuTemp, { value: gpu ? gpu.temp_c : null, unit: '°C', label: 'GPU 温度', max: 100, warm: 70, hot: 85 });
   putGauge(ui.gGpuPower, { value: gpu ? gpu.power_w : null, unit: 'W', label: 'GPU 功耗', max: 150 });
   putGauge(ui.gMem, { value: sys.mem_used_pct, unit: '%', label: '内存占用', max: 100, warm: 85, hot: 95 });
-  putGauge(ui.gBattery, { value: batt ? batt.percent : null, unit: '%', label: '电池', max: 100 });
+  putGauge(ui.gBattery, { value: batt && batt.percent !== undefined ? batt.percent : null, unit: '%', label: '电池', max: 100 });
   putGauge(ui.gDiskTemp, { value: disk && disk.temp_c !== null && disk.temp_c !== undefined ? disk.temp_c : null, unit: '°C', label: 'SSD 温度', max: 90, warm: 60, hot: 75 });
 
   ui.gCpuName.textContent = sys.device && sys.device.cpu ? sys.device.cpu : '—';
@@ -336,7 +339,7 @@ function renderMonitor(s) {
     mem: sys.mem_used_pct === undefined ? null : sys.mem_used_pct,
     cpu_fan: ready ? s.cpu_fan_rpm : null,
     gpu_fan: ready ? s.gpu_fan_rpm : null,
-    battery: batt ? batt.percent : null,
+    battery: batt && batt.percent !== undefined ? batt.percent : null,
     power_src: ready ? (s.is_ac_powered ? '适配器' : '电池') : null,
   };
 
@@ -355,7 +358,8 @@ function renderMonitor(s) {
     tr.dataset.level = sensorLevel(key, value);
   }
 
-  ui.monitorMeta.textContent = ready ? '采样 ' + stats.samples + ' 次' : 'EC 不可用（部分数据仍可读）';
+  ui.monitorMeta.textContent = (ready ? '采样 ' + stats.samples + ' 次' : 'EC 不可用（部分数据仍可读）')
+    + (s.system_slow_stale ? ' · 电池/SSD 为缓存（查询失败或超期）' : '');
 }
 
 // ---------- 设备信息 ----------
@@ -379,8 +383,8 @@ function renderDevice(s) {
   ui.devGpuClock.textContent = gpu ? gpu.clock_mhz + ' MHz / ' + gpu.mem_clock_mhz + ' MHz' : '—';
   ui.devGpuVram.textContent = gpu ? gpu.vram_used_mb + ' / ' + gpu.vram_total_mb + ' MiB' : '—';
 
-  ui.devMemTotal.textContent = sys.mem_total_mb ? (sys.mem_total_mb / 1024).toFixed(1) + ' GB' : '—';
-  ui.devMemUsed.textContent = sys.mem_total_mb
+  ui.devMemTotal.textContent = typeof sys.mem_total_mb === 'number' ? (sys.mem_total_mb / 1024).toFixed(1) + ' GB' : '—';
+  ui.devMemUsed.textContent = typeof sys.mem_total_mb === 'number' && typeof sys.mem_used_mb === 'number'
     ? (sys.mem_used_mb / 1024).toFixed(1) + ' GB / ' + pct(sys.mem_used_pct)
     : '—';
 
@@ -394,6 +398,11 @@ function renderDevice(s) {
   ui.devOs.textContent = dev.os || '—';
   ui.devProject.textContent = fmt(s.project_id);
   ui.devPoll.textContent = (POLL_MS / 1000).toFixed(1) + ' 秒';
+  ui.devVersion.textContent = s.app_version || '—';
+  ui.devLog.textContent = s.log_dir || '—';
+  ui.devLog.title = s.log_dir || '';
+  ui.logPath.textContent = s.log_dir || '';
+  ui.logPath.title = s.log_dir || '';
 }
 
 // ---------- 电池 ----------
@@ -410,8 +419,8 @@ function renderBattery(s) {
   }
 
   ui.battState.textContent = batt.charging ? '充电中' : batt.discharging ? '放电中' : batt.on_ac ? '接电 · 未充电' : '电池供电';
-  ui.battPct.textContent = batt.percent + ' %';
-  ui.battFill.style.width = Math.max(0, Math.min(100, batt.percent)) + '%';
+  ui.battPct.textContent = typeof batt.percent === 'number' ? batt.percent + ' %' : '—';
+  ui.battFill.style.width = typeof batt.percent === 'number' ? Math.max(0, Math.min(100, batt.percent)) + '%' : '0%';
 
   ui.battRemain.textContent = batt.remaining_mwh ? (batt.remaining_mwh / 1000).toFixed(2) + ' Wh' : '—';
   ui.battFull.textContent = batt.full_mwh ? (batt.full_mwh / 1000).toFixed(2) + ' Wh' : '—';
@@ -491,7 +500,19 @@ function updateDirty() {
   ui.applyPower.disabled = !ecReady || !dirty;
 }
 
+function syncLimits(s) {
+  if (limitsSynced || !s.limits_meta) return;
+  for (const key of ['pl1', 'pl2', 'pl4']) {
+    const range = s.limits_meta[key];
+    if (!Array.isArray(range) || range.length !== 2) continue;
+    ui[key].min = String(range[0]);
+    ui[key].max = String(range[1]);
+  }
+  limitsSynced = true;
+}
+
 function renderPerformance(s) {
+  syncLimits(s);
   renderMode(s.mode);
   renderBitfield(s.mode_raw, s.mode);
 
@@ -576,6 +597,7 @@ async function refresh(force = false) {
 // ---------- 动作 ----------
 
 async function doSwitchMode(mode) {
+  if (!window.confirm('切换档位会写入 EC 的档位寄存器，可能改变风扇和功耗行为。确定继续吗？')) return;
   setBusy(true);
   setStatus('正在切换档位…', 'busy');
   try {
@@ -590,6 +612,7 @@ async function doSwitchMode(mode) {
 }
 
 async function doToggleFanBoost(enabled) {
+  if (!window.confirm(enabled ? '开启强冷会立即提高风扇转速并增加噪声。确定开启吗？' : '确定关闭强冷吗？')) return;
   setBusy(true);
   setStatus(enabled ? '正在开启强冷…' : '正在关闭强冷…', 'busy');
   try {
@@ -606,6 +629,7 @@ async function doToggleFanBoost(enabled) {
 
 async function doApplyPower() {
   const cur = readSliders();
+  if (!window.confirm(`将把默认功耗墙写为 PL1=${cur.pl1}W / PL2=${cur.pl2}W / PL4=${cur.pl4}W。\n确定写入 EC 吗？`)) return;
   setBusy(true);
   setStatus('正在写入功耗墙…', 'busy');
   try {
@@ -727,6 +751,7 @@ async function doDeleteProfile(name) {
 }
 
 async function doApplyProfile(name) {
+  if (!window.confirm(`配置「${name}」会写入默认功耗墙，且可能开启强冷。确定应用吗？`)) return;
   setBusy(true);
   setStatus('正在应用「' + name + '」…', 'busy');
   try {
@@ -824,11 +849,21 @@ function renderCurves(data) {
 }
 
 async function loadCurves(force) {
-  if (!force && Date.now() - curvesLoadedAt < CURVE_REFRESH_MS) return;
+  const now = Date.now();
+  if (!force && now - curvesLoadedAt < CURVE_REFRESH_MS) return;
+  if (!force && now < curveRetryAfter) return;
+  ui.reloadCurves.disabled = true;
   try {
     renderCurves(await invoke(IPC.getFanCurves));
+    curveRetryAfter = 0;
   } catch (e) {
-    ui.curveMeta.textContent = '读取失败：' + e;
+    curveRetryAfter = now + CURVE_RETRY_MS;
+    ui.curveMeta.textContent = '读取失败：' + e + '（30 秒后可重试，或点重新读取）';
+    if (!curvesLoadedAt) {
+      ui.curveBody.textContent = '暂时无法读取风扇曲线。请检查 EC 驱动与管理员权限，然后重试。';
+    }
+  } finally {
+    ui.reloadCurves.disabled = false;
   }
 }
 

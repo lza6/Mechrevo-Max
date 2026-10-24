@@ -111,4 +111,8 @@
 | 验证台账（避免重复验证） | `docs/VERIFICATION-LEDGER.md` |
 | 历史任务台账与事件记录 | `workflow_status.md` |
 | 需求追踪（历史编号 R1–R23） | `docs/REQUIREMENTS-TRACEABILITY.md` |
-| 本轮任务记录 / 周报 | `tasks/riper5_20261024_194117.md`、`tasks/weekly.md` |
+| 周报（长期台账） | `tasks/weekly.md` |
+| 已归档的任务记录 | `docs/archive/plans/20261024/`（含 `archive-manifest.md`） |
+| 门禁 | `policy.md` |
+| 接缝与测试台账 | `test_ledger.md` |
+| 前端冒烟规格 | `docs/qa/ui-smoke-spec.md` |

@@ -20,7 +20,7 @@
 | 形态 | Windows x64 桌面应用（Rust `mechrevo-core` + Tauri v2） |
 | 仓库 | https://github.com/lza6/Mechrevo-Max |
 | 当前版本 | v0.1.2（护栏补丁 + 独立复审修复，已发布） |
-| 主分支 HEAD | `1fe2a14`（已推送，与 `origin/main` 一致）；tag `v0.1.1` 已推送 |
+| 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0`、`v0.1.1`、`v0.1.2` |
 | 规格基线 | `docs/SPEC.md`（安全红线在 §5.1） |
 
 ---
@@ -30,7 +30,7 @@
 | # | 里程碑 | 目标状态 | 验收标准 | 证据 | 状态 |
 |---|---|---|---|---|---|
 | M1 | v0.1.0 首个可用版本 | ✅ 已达成 | 核心链路真机验证 + 发布 | tag `v0.1.0`、`mechrevo-max.exe` 4.76 MiB | done |
-| M2 | v0.1.1 护栏补丁 + v0.1.2 复审修复 | ✅ 已达成 | P0/P1 全部离线可修项关闭；已推送并发版 | 核心 44 + bin 4 + 契约 8 全绿；`main`=`1fe2a14`；tag `v0.1.1`；[Release](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.1)（asset 4 992 512 B）；证据 `evidence/v0.1.1.json` | done |
+| M2 | v0.1.1 护栏 + v0.1.2 复审修复 | ✅ 已达成 | P0/P1 全部离线可修项关闭；已推送并发版 | 核心 46 + bin 4 + 契约 8 全绿；tag `v0.1.2`；[Release v0.1.2](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.2)（asset 4 994 048 B）；证据 `evidence/v0.1.1.json`、`evidence/v0.1.2.json` | done |
 | M3 | v0.2.0 可观测性（温度） | **已确认下一站**（Q-01） | 温度读数与外部工具交叉吻合；探测全程限速只读 | 待填 | todo |
 | M4 | v0.2.1 工程化 | 规划 | CI 必绿 + 覆盖率基线 + 打包验证 | 待填 | todo |
 | M5 | v0.3.0 多机型 | blocked | 第二台机型只读可用 + 未知机型安全降级 | 需第二台机器 | blocked |

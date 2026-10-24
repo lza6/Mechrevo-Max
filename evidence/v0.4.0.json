@@ -1,0 +1,60 @@
+{
+  "task_id": "v0.4.0",
+  "status": "passed",
+  "timestamp": "2026-10-25T00:20:00+08:00",
+  "scope": "回答「界面没有真实 PL1/PL2」：显示固件基线 PL（只读）+ 风扇曲线只读展示；更正 0x783-0x786 的旧结论",
+  "commands_executed": [
+    {
+      "cmd": "cd core && cargo test --offline",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 68 passed（+6 曲线模块、+2 固件基线）"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --bin mechrevo-max / --test ipc_contract",
+      "exit_code": 0,
+      "raw_output_tail": "20 passed / 8 passed（命令 14 个，双向比对通过）"
+    },
+    {
+      "cmd": "两个 crate clippy/fmt",
+      "exit_code": 0,
+      "raw_output_tail": "clippy 0 warning；fmt exit 0"
+    },
+    {
+      "cmd": "受控写入实验：0x730 75→50（并写提交 0x767=1）后读 0x783",
+      "exit_code": 0,
+      "raw_output_tail": "0x783 保持 75 不变；切办公/狂暴档再切回，0x783 仍为 75 → 0x783 不是生效值而是固件基线"
+    },
+    {
+      "cmd": "全量 4096 地址扫描 → 写 0x730=50+提交 → 再全量扫描（差分）",
+      "exit_code": 0,
+      "raw_output_tail": "A→B 变化地址中，除 0x730 自身与风扇/计数器漂移外，没有任何寄存器跟随 → EC 侧无生效值镜像"
+    },
+    {
+      "cmd": "真实 GUI：启动 v0.4.0 → 截图",
+      "exit_code": 0,
+      "raw_output_tail": "界面实录：默认功耗墙 PL1 75/PL2 75/PL4 200 + 固件基线 PL1 75 W · PL2 130 W · PL4 200 W · 0x786=133（只读 0x783–0x786）+ MSR 限制说明；采样 间隔2.0s·实测2.0s·5次；内存 47.5 MB"
+    },
+    {
+      "cmd": "Playwright 12 条新断言（固件基线显示/曲线 6 块/2 张图/只读声明/5 面板）",
+      "exit_code": 0,
+      "raw_output_tail": "11/12 通过；唯一失败是断言正则写错（#fw-note 本身没有只读二字，那句在 label 上），行为正确"
+    }
+  ],
+  "hardware_findings": {
+    "firmware_baseline": "0x783=75, 0x784=130, 0x785=200, 0x786=133 —— 改默认 PL、切档位均不改变 → 固件/BIOS 基线，不是生效值（更正此前 NotApplicable 结论）",
+    "no_applied_mirror": "全量扫描差分证明：写默认功耗寄存器后 EC 内无任何寄存器跟随 → 「写入是否真的约束 CPU 功耗」无法从 EC 证明，需 MSR/功率计",
+    "official_profile": "Mode1_Profile1.json: CPU.PL1_Enabled=False、PL2_Enabled=False、FAN.FanSwitchSpeedEnabled=0（对应 0x787=0x81 关闭）→ 官方默认并未启用 PL 覆盖",
+    "fan_curve_blocks": "0x0F00-0x0F5F 六个 16 字节块：温度点×4（54..81 / 48..82 / 56..75 / 48..76）+ 占空比×2（192/196/200）"
+  },
+  "artifact": {
+    "path": "app/src-tauri/target/release/mechrevo-max.exe",
+    "size_bytes": 5329920,
+    "sha256": "91503c9036f1f1f2204149a1c5956fc9404bf00b83fb573f6595331bc62feff8"
+  },
+  "limitations": [
+    "系统实际生效 PL 仍不可读（需 MSR 0x610 / 内核驱动）",
+    "风扇曲线只做只读展示：配对为数据特征候选，未与官方 UserFanTables 交叉核对",
+    "真实应用里点「读取曲线」这一步未做 UI 自动化（WebView2 内容点击未接线）；曲线渲染在浏览器端用真机字节验证",
+    "写曲线能力明确不做（风险高）"
+  ]
+}

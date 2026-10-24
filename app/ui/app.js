@@ -22,6 +22,7 @@ const IPC = {
   saveProfile: 'save_profile',
   deleteProfile: 'delete_profile',
   applyProfile: 'apply_profile',
+  getFanCurves: 'get_fan_curves',
   relaunchElevated: 'relaunch_elevated',
 };
 
@@ -80,6 +81,9 @@ const ui = {
   readRegs: el('read-regs'),
   exportRegs: el('export-regs'),
   regOut: el('reg-out'),
+  fwPl: el('fw-pl'),
+  loadCurves: el('load-curves'),
+  curveBody: el('curve-body'),
   logPath: el('log-path'),
   statusMsg: el('status-msg'),
   persistError: el('persist-error'),
@@ -334,6 +338,13 @@ function renderPower(s) {
   const dirty = ui.pending.dataset.dirty === 'true';
   if (!editingPower && !dirty) setSliders(baseline[activePowerMode]);
   updateDirty();
+
+  if (ui.fwPl) {
+    const fw = s.firmware_power;
+    ui.fwPl.textContent = fw
+      ? `PL1 ${fw.pl1} W · PL2 ${fw.pl2} W · PL4 ${fw.pl4} W · 0x786=${fw.extra}`
+      : '—';
+  }
 
   ui.undoMode.disabled = !ecReady || !s.can_undo_mode;
   ui.undoPower.disabled = !ecReady || !s.can_undo_power;
@@ -643,6 +654,87 @@ function doExportRegs() {
   setStatus('寄存器已导出 CSV', 'ok');
 }
 
+// ---------- 风扇曲线（只读） ----------
+
+function svgPolyline(points, width, height) {
+  if (!points.length) return '';
+  const xs = points.map((p) => p.temp_c);
+  const ys = points.map((p) => p.duty_pct);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = 0;
+  const maxY = 100;
+  const sx = (x) => (maxX === minX ? width / 2 : ((x - minX) / (maxX - minX)) * (width - 16) + 8);
+  const sy = (y) => height - 10 - ((y - minY) / (maxY - minY)) * (height - 20);
+  const pts = points.map((p) => `${sx(p.temp_c).toFixed(1)},${sy(p.duty_pct).toFixed(1)}`).join(' ');
+  const dots = points
+    .map((p) => `<circle cx="${sx(p.temp_c).toFixed(1)}" cy="${sy(p.duty_pct).toFixed(1)}" r="2.5"></circle>`)
+    .join('');
+  return `<svg class="curve-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img"
+      aria-label="温度到占空比曲线，${points.length} 个点">
+      <line x1="8" y1="${height - 10}" x2="${width - 8}" y2="${height - 10}"></line>
+      <line x1="8" y1="10" x2="8" y2="${height - 10}"></line>
+      ${dots}<polyline points="${pts}"></polyline>
+    </svg>`;
+}
+
+function renderCurves(data) {
+  ui.curveBody.textContent = '';
+
+  const blocks = document.createElement('div');
+  blocks.className = 'curve-blocks';
+  for (const b of data.blocks) {
+    const row = document.createElement('div');
+    row.className = 'curve-block';
+    const addr = document.createElement('b');
+    addr.textContent = `0x${b.base.toString(16).toUpperCase().padStart(4, '0')}`;
+    const kind = document.createElement('span');
+    kind.className = 'curve-kind';
+    kind.dataset.kind = b.kind;
+    kind.textContent = { temperature_points: '温度点', duty_percent: '占空比', unknown: '未知' }[b.kind] || b.kind;
+    const vals = document.createElement('span');
+    vals.textContent = b.values.join(', ');
+    row.append(addr, kind, vals);
+    blocks.appendChild(row);
+  }
+  ui.curveBody.appendChild(blocks);
+
+  const grid = document.createElement('div');
+  grid.className = 'curve-grid';
+  for (const c of data.curves) {
+    const card = document.createElement('div');
+    card.className = 'curve-card';
+    const h = document.createElement('h3');
+    h.textContent = c.label;
+    const meta = document.createElement('div');
+    meta.className = 'mono';
+    meta.textContent = `温度块 0x${c.temp_block.toString(16).toUpperCase()} → 占空比块 0x${c.duty_block.toString(16).toUpperCase()}`;
+    card.append(h, meta);
+    card.insertAdjacentHTML('beforeend', svgPolyline(c.points, 240, 96));
+    grid.appendChild(card);
+  }
+  ui.curveBody.appendChild(grid);
+
+  const note = document.createElement('p');
+  note.className = 'hint';
+  note.textContent = data.note;
+  ui.curveBody.appendChild(note);
+}
+
+async function doLoadCurves() {
+  setBusy(true);
+  setStatus('正在读取风扇曲线（只读，约 2 秒）…', 'busy');
+  try {
+    const data = await invoke(IPC.getFanCurves);
+    renderCurves(data);
+    setStatus('风扇曲线已读取（只读）', 'ok');
+  } catch (e) {
+    setStatus(`读取曲线失败：${e}`, 'err');
+  } finally {
+    setBusy(false);
+  }
+}
+
 // ---------- 事件绑定 ----------
 
 ui.modeList.addEventListener('click', (ev) => {
@@ -704,6 +796,7 @@ ui.saveProfile.addEventListener('click', doSaveProfile);
 ui.readRegs.addEventListener('click', doReadRegs);
 ui.exportRegs.addEventListener('click', doExportRegs);
 ui.regAddrs.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') doReadRegs(); });
+ui.loadCurves.addEventListener('click', doLoadCurves);
 
 ui.relaunch.addEventListener('click', async () => {
   setBusy(true);

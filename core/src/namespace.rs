@@ -210,39 +210,53 @@ impl Mode {
     }
 }
 
+/// 固件侧基线 PL1（只读）.
+///
+/// **2026-10-24 更正**：早前本模块把它标为 `NotApplicable`（当时读出 0），
+/// 但真机复测读出 75，且做了两组决定性实验：
+/// ① 把默认功耗 `0x730` 从 75 改成 50 并写提交寄存器 `0x767` —— `0x783` 不变；
+/// ② 依次切到办公/狂暴档再切回 —— `0x783` 仍不变。
+/// 因此它**不是**"当前生效值"，而是**固件/BIOS 给的基线**，且不随应用侧写入变化。
+pub const FW_PL1: Reg = Reg {
+    addr: 0x0783,
+    name: "Firmware Baseline PL1",
+    status: AddrStatus::Verified,
+    note: "实测恒 75；改默认 PL 与切档都不影响它 → 固件基线，非生效值",
+};
+
+/// 固件侧基线 PL2（只读，实测 130）.
+pub const FW_PL2: Reg = Reg {
+    addr: 0x0784,
+    name: "Firmware Baseline PL2",
+    status: AddrStatus::Verified,
+    note: "实测 130；与默认寄存器 0x731=75 不同，说明固件有自己的上限",
+};
+
+/// 固件侧基线 PL4（只读，实测 200）.
+pub const FW_PL4: Reg = Reg {
+    addr: 0x0785,
+    name: "Firmware Baseline PL4",
+    status: AddrStatus::Verified,
+    note: "实测 200",
+};
+
+/// `0x0786`（实测 133）—— 含义未确认，不猜测用途.
+pub const FW_EXTRA: Reg = Reg {
+    addr: 0x0786,
+    name: "Firmware Baseline Extra",
+    status: AddrStatus::CommunityUnverified,
+    note: "实测 133；社区曾称 TCC Offset，但本机未验证，不用于任何写入",
+};
+
 /// 本机实测**不适用**的社区地址 —— 保留在表里作为反面证据, 避免误用.
-pub const NOT_APPLICABLE: &[Reg] = &[
-    Reg {
-        addr: 0x0783,
-        name: "当前生效 PL1 (社区)",
-        status: AddrStatus::NotApplicable,
-        note: "本机读出 0, 地址不适用",
-    },
-    Reg {
-        addr: 0x0784,
-        name: "当前生效 PL2 (社区)",
-        status: AddrStatus::NotApplicable,
-        note: "本机读出 0",
-    },
-    Reg {
-        addr: 0x0785,
-        name: "当前生效 PL4 (社区)",
-        status: AddrStatus::NotApplicable,
-        note: "本机读出 0",
-    },
-    Reg {
-        addr: 0x0786,
-        name: "TCC Offset (社区)",
-        status: AddrStatus::NotApplicable,
-        note: "本机读出 0",
-    },
-    Reg {
-        addr: 0x0D4B,
-        name: "GPU 核心频率 (社区)",
-        status: AddrStatus::NotApplicable,
-        note: "本机读出 255",
-    },
-];
+///
+/// 注：`0x0783`–`0x0786` 已从本列表移出（2026-10-24 复测有非零值，见 [`FW_PL1`] 等）。
+pub const NOT_APPLICABLE: &[Reg] = &[Reg {
+    addr: 0x0D4B,
+    name: "GPU 核心频率 (社区)",
+    status: AddrStatus::NotApplicable,
+    note: "本机读出 255",
+}];
 
 #[cfg(test)]
 mod tests {

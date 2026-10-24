@@ -6,6 +6,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use mechrevo_core::ec::{Ec, WindowsAcpiTransport};
+use mechrevo_core::fancurve::FanCurveBlock;
 use mechrevo_core::namespace::Mode as PowerMode;
 use mechrevo_core::profile::Profile;
 use mechrevo_core::{
@@ -125,6 +126,8 @@ struct StatusPayload {
     office_power: Option<PowerLimitsDto>,
     /// 强冷（`0x0751` bit6）当前是否开启.
     fan_boost: Option<bool>,
+    /// 固件侧基线功耗（只读，与 EC 默认功耗寄存器不是一回事）.
+    firmware_power: Option<FirmwarePowerDto>,
     can_undo_power: bool,
     can_undo_mode: bool,
     can_undo_fan_boost: bool,
@@ -201,6 +204,7 @@ fn unavailable_with(
         gaming_power: None,
         office_power: None,
         fan_boost: None,
+        firmware_power: None,
         can_undo_power,
         can_undo_mode,
         can_undo_fan_boost: false,
@@ -245,6 +249,10 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
     // 档位字段只读一次：`current()` 与 `raw_fields()` 都会读 0x751，
     // 合并后每轮轮询少一次 EC 访问（20 ms 限速下等于少 20 ms 延迟）。
     let fan_boost = mode_ctl.fan_boost().ok();
+    let firmware_power = power_ctl
+        .read_firmware_baseline()
+        .ok()
+        .map(FirmwarePowerDto::from);
     let raw = mode_ctl.raw_fields().ok();
     let mode_key = raw
         .and_then(|(field1, _)| OperatingMode::from_field1(field1))
@@ -270,6 +278,7 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
             .ok()
             .map(PowerLimitsDto::from),
         fan_boost,
+        firmware_power,
         can_undo_power,
         can_undo_mode,
         can_undo_fan_boost,
@@ -544,6 +553,85 @@ fn apply_profile_now(state: &AppState, name: &str) -> Result<String, String> {
     ))
 }
 
+/// 风扇曲线读取结果（只读；含"候选配对"，不是协议结论）.
+#[derive(Serialize)]
+struct FanCurvesDto {
+    blocks: Vec<FanCurveBlock>,
+    /// 候选配对：曲线 A/B 的 (温度, 占空比%) —— 只是展示用的猜测.
+    curves: Vec<CurveSeries>,
+    note: String,
+}
+
+#[derive(Serialize)]
+struct CurveSeries {
+    label: String,
+    temp_block: u16,
+    duty_block: u16,
+    points: Vec<CurvePoint>,
+}
+
+#[derive(Serialize)]
+struct CurvePoint {
+    temp_c: u8,
+    duty_pct: u8,
+}
+
+/// 固件基线功耗（只读，与"EC 默认功耗寄存器"并排展示）.
+#[derive(Serialize)]
+struct FirmwarePowerDto {
+    pl1: u8,
+    pl2: u8,
+    pl4: u8,
+    extra: u8,
+}
+
+impl From<mechrevo_core::FirmwareBaseline> for FirmwarePowerDto {
+    fn from(b: mechrevo_core::FirmwareBaseline) -> Self {
+        Self {
+            pl1: b.pl1,
+            pl2: b.pl2,
+            pl4: b.pl4,
+            extra: b.extra,
+        }
+    }
+}
+
+/// 读风扇曲线（同步业务体，只读）.
+fn read_fan_curves_now(state: &AppState) -> Result<FanCurvesDto, String> {
+    let _guard = lock_ec(state).map_err(|(_, message)| message)?;
+    let ec = open_ec().map_err(|e| e.to_string())?;
+    let blocks = mechrevo_core::fancurve::read_blocks(&ec).map_err(|e| e.to_string())?;
+
+    // 候选配对：温度块 0/3 ↔ 占空比块 2/5（本机实测的排布；未与官方表交叉核对）
+    let mut curves = Vec::new();
+    for (label, ti, di) in [("曲线 A（候选）", 0usize, 2usize), ("曲线 B（候选）", 3, 5)]
+    {
+        let (Some(temp), Some(duty)) = (blocks.get(ti), blocks.get(di)) else {
+            continue;
+        };
+        let points = mechrevo_core::fancurve::pair_points(&temp.values, &duty.values)
+            .into_iter()
+            .map(|(t, d)| CurvePoint {
+                temp_c: t,
+                duty_pct: d,
+            })
+            .collect();
+        curves.push(CurveSeries {
+            label: label.to_owned(),
+            temp_block: temp.base,
+            duty_block: duty.base,
+            points,
+        });
+    }
+
+    Ok(FanCurvesDto {
+        blocks,
+        curves,
+        note: "只读展示。官方 profile 只有表名（如 M1T1），真正的曲线数值不在本机备份里，               因此『温度块 ↔ 占空比块』的配对未经交叉核对；本程序不会写这些表。"
+            .to_owned(),
+    })
+}
+
 // ============================================================
 // IPC 命令层
 //
@@ -746,6 +834,15 @@ async fn apply_profile(state: SharedState<'_>, name: String) -> Result<String, S
     result
 }
 
+/// 读风扇曲线（只读）.
+#[tauri::command]
+async fn get_fan_curves(state: SharedState<'_>) -> Result<FanCurvesDto, String> {
+    let worker = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || read_fan_curves_now(&worker))
+        .await
+        .map_err(join_error)?
+}
+
 fn main() {
     // 必须在任何可能失败的逻辑之前：release 下没有 stderr，日志是唯一的事后证据
     let log_dir = logging::init();
@@ -777,6 +874,7 @@ fn main() {
             save_profile,
             delete_profile,
             apply_profile,
+            get_fan_curves,
             relaunch_elevated
         ])
         .run(tauri::generate_context!())

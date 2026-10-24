@@ -148,6 +148,39 @@ impl<'a, T: EcTransport> PowerController<'a, T> {
     }
 }
 
+/// 固件侧基线功耗（**只读**，不随应用写入或档位切换变化）.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FirmwareBaseline {
+    /// 固件基线 PL1 (W).
+    pub pl1: u8,
+    /// 固件基线 PL2 (W).
+    pub pl2: u8,
+    /// 固件基线 PL4 (W).
+    pub pl4: u8,
+    /// `0x0786` 的原始值（含义未确认）.
+    pub extra: u8,
+}
+
+impl<'a, T: EcTransport> PowerController<'a, T> {
+    /// 读取固件侧基线功耗（只读）.
+    ///
+    /// 与 [`Self::read_defaults`] 的区别：`read_defaults` 读的是**可写的默认功耗寄存器**
+    /// （`0x730`–`0x736`），本方法读的是**固件/BIOS 给的上限**（`0x783`–`0x786`），
+    /// 实测两者可以不一致（本机默认 PL2=75，固件基线 PL2=130）。
+    ///
+    /// # Errors
+    /// 读取失败时返回错误.
+    pub fn read_firmware_baseline(&self) -> Result<FirmwareBaseline> {
+        use crate::namespace as ns;
+        Ok(FirmwareBaseline {
+            pl1: self.ec.read(ns::FW_PL1.addr)?,
+            pl2: self.ec.read(ns::FW_PL2.addr)?,
+            pl4: self.ec.read(ns::FW_PL4.addr)?,
+            extra: self.ec.read(ns::FW_EXTRA.addr)?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,6 +300,35 @@ mod tests {
         // PL1 已被写入, 但因失败必须被自动还原
         assert_eq!(ec.read(0x0730).unwrap(), 75, "失败后 PL1 应被回滚");
         assert_eq!(ec.read(0x0731).unwrap(), 75);
+    }
+
+    #[test]
+    fn reads_firmware_baseline_separately_from_defaults() {
+        let t = MockTransport::new();
+        // 默认寄存器：Gaming 75/75/200
+        t.seed(0x0730, 75);
+        t.seed(0x0731, 75);
+        t.seed(0x0732, 200);
+        // 固件基线：75/130/200 + 133（本机实测值）
+        t.seed(0x0783, 75);
+        t.seed(0x0784, 130);
+        t.seed(0x0785, 200);
+        t.seed(0x0786, 133);
+        let ec = Ec::new(t);
+        let ctl = PowerController::new(&ec);
+
+        let defaults = ctl.read_defaults(Mode::Gaming).unwrap();
+        let fw = ctl.read_firmware_baseline().unwrap();
+        assert_eq!((defaults.pl1, defaults.pl2, defaults.pl4), (75, 75, 200));
+        assert_eq!((fw.pl1, fw.pl2, fw.pl4, fw.extra), (75, 130, 200, 133));
+        assert_ne!(defaults.pl2, fw.pl2, "默认 PL2 与固件基线 PL2 本机就不一致");
+    }
+
+    #[test]
+    fn firmware_baseline_read_failure_propagates() {
+        let t = MockTransport::new().with_failing_read(0x0784);
+        let ec = Ec::new(t);
+        assert!(PowerController::new(&ec).read_firmware_baseline().is_err());
     }
 
     #[test]

@@ -156,6 +156,14 @@ pnputil.exe /scan-devices</pre>
             </div>
           </div>
 
+          <div class="fw-row">
+            <span class="fw-label">固件基线<em>只读 · 0x783–0x786</em></span>
+            <span class="fw-values mono" id="fw-pl">—</span>
+            <span class="hint" id="fw-note">
+              固件/BIOS 给的上限，与上面那排"默认功耗"是两回事：实测改默认 PL、切档位都不会改变它。
+            </span>
+          </div>
+
           <p class="hint" id="power-source">
             这是 EC 里的<strong>默认功耗寄存器</strong>（<code>0x730</code>–<code>0x736</code>）。
             实际生效还受固件 / BIOS 与系统策略约束；「系统当前实际生效值」需要读 MSR（0x610），
@@ -203,6 +211,25 @@ pnputil.exe /scan-devices</pre>
             <button class="btn subtle" id="export-regs" disabled>导出 CSV</button>
           </div>
           <div class="reg-out mono" id="reg-out" aria-live="polite">—</div>
+        </section>
+
+        <!-- 风扇曲线（只读） -->
+        <section class="panel" aria-labelledby="curve-heading">
+          <div class="panel-head">
+            <h2 id="curve-heading">风扇曲线</h2>
+            <span class="panel-meta">只读 · EC 0x0F00–0x0F5F · 6 个 16 字节表</span>
+          </div>
+          <div class="reg-form">
+            <span class="hint" style="flex:1">
+              官方 profile 里只存了表名（如 <code>M1T1</code>），真正的曲线数值不在本机备份中，
+              所以下面的「温度块 ↔ 占空比块」配对是<strong>按数据特征做的候选</strong>，未经交叉核对。
+              <strong>本程序不会写这些表</strong>（写错风扇可能不转 → 过热）。
+            </span>
+            <button class="btn" id="load-curves">读取曲线</button>
+          </div>
+          <div class="curve-body" id="curve-body">
+            <p class="hint">点「读取曲线」从 EC 读一次（96 次只读访问，约 2 秒）。</p>
+          </div>
         </section>
 
       </section>

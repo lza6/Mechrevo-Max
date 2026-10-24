@@ -53,6 +53,7 @@ const BACKEND_COMMANDS: &[(&str, &[&str])] = &[
     ("save_profile", &["profile"]),
     ("delete_profile", &["name"]),
     ("apply_profile", &["name"]),
+    ("get_fan_curves", &[]),
     ("relaunch_elevated", &[]),
 ];
 
@@ -73,6 +74,7 @@ const FRONTEND_CONTRACT: &[(&str, &[&str])] = &[
     ("save_profile", &["profile"]),
     ("delete_profile", &["name"]),
     ("apply_profile", &["name"]),
+    ("get_fan_curves", &[]),
     ("relaunch_elevated", &[]),
 ];
 

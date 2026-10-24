@@ -40,17 +40,19 @@
 pub mod control;
 pub mod ec;
 pub mod error;
+pub mod fancurve;
 pub mod mode;
 pub mod namespace;
 pub mod profile;
 pub mod sensors;
 
-pub use control::{ChangeRecord, PowerController, PowerLimits};
+pub use control::{ChangeRecord, FirmwareBaseline, PowerController, PowerLimits};
 pub use ec::{
     AccessThrottle, DEFAULT_MIN_INTERVAL, Ec, EcTransport, HARD_MIN_INTERVAL, MockTransport,
     RestoreGuard, RollbackPoint, WindowsAcpiTransport,
 };
 pub use error::{Error, Result};
+pub use fancurve::{BlockKind, FanCurveBlock};
 pub use mode::{FanBoostChange, ModeChange, ModeController, OperatingMode};
 pub use namespace::{AddrStatus, Mode, Reg};
 pub use profile::{MAX_NAME_LEN, Profile};

@@ -1,0 +1,85 @@
+name: CI
+
+# 存在意义：把 docs/DEPLOYMENT.md §7 的人工清单自动化，止住「改了代码没改文档 / 测试悄悄变红」这类漂移。
+# 注意：本 workflow **不跑**以下内容，原因是硬性的（见 docs/SPEC.md §5.1）：
+#   - 真机硬件测试（core/tests/hardware.rs 的 #[ignore]）—— CI 无硬件，且真机操作有硬复位风险
+#   - GUI E2E —— 用户明确禁用真机 UI 自动化
+#   - 覆盖率门禁 —— 尚无 cargo-llvm-cov 基线（v0.2.1 补）
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  verify:
+    name: build · test · lint
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            core/target
+            app/src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('core/Cargo.lock', 'app/src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: core · fmt
+        working-directory: core
+        run: cargo fmt --check
+
+      - name: core · clippy（0 warning 门槛）
+        working-directory: core
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: core · test（46 单测 + doctest；真机测试保持 ignored）
+        working-directory: core
+        run: cargo test
+
+      - name: app · fmt
+        working-directory: app/src-tauri
+        run: cargo fmt --check
+
+      - name: app · clippy（0 warning 门槛）
+        working-directory: app/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: app · IPC 命令层单测
+        working-directory: app/src-tauri
+        run: cargo test --bin mechrevo-max
+
+      - name: app · 前后端契约（解析 app/ui/app.js 的 IPC 表）
+        working-directory: app/src-tauri
+        run: cargo test --test ipc_contract
+
+      - name: 前端语法
+        run: node --check app/ui/app.js
+
+      - name: 合规自检（不得包含官方二进制/驱动/反编译产物）
+        shell: bash
+        run: |
+          hits=$(git ls-files | grep -Ei '\.(sys|msix|msixbundle|dll|exe)$' || true)
+          if [ -n "$hits" ]; then
+            echo "::error::检测到被禁止入库的二进制/驱动文件:"; echo "$hits"; exit 1
+          fi
+          echo "合规检查通过：无官方二进制、驱动或反编译产物"

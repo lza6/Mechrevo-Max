@@ -54,8 +54,10 @@
 | 前端语法 | ✅ 已验证 | `node --check app/ui/app.js` → 通过 | 2026-10-24 |
 | 前端源码契约解析 | ✅ 已验证 | `frontend_source_ipc_table_matches_backend`：解析 `app.js` 的 `IPC` 表并与后端命令集双向比对；`no_raw_string_command_names_in_frontend` 禁止裸字符串命令名 | 2026-10-24 |
 | UI 元素 id 与 `ui` 映射一致性 | ✅ 静态确认 | 28 项逐一比对，全部匹配 | 2026-10-17 |
+| 前端渲染与交互（浏览器 + mock 后端） | ✅ 已验证 | Playwright(Chromium) + 假 `invoke`：37/37 断言通过，`pageerror`/`console.error` 各 0；覆盖 ready / 驱动缺失 / 权限不足 / 锁中毒 四态 + 滑块脏检查 + 轮询停启 + IPC 参数形状 | 2026-10-24 |
 | 可访问性 | ✅ 静态确认 | `:focus-visible` 覆盖按钮/滑块/tab；`role="status" aria-live` 状态栏；`role="alert"` 告警区；`prefers-reduced-motion` 降级 | 2026-10-24 |
-| 界面真实渲染 | ✅ 已验证 | 截图 `docs/screenshots/main.png`（显示真实 EC 数据，v0.1.0 时采集） | 2026-10-17 |
+| 界面真实渲染（真机窗口） | ✅ 已验证 | 截图 `docs/screenshots/main.png`（显示真实 EC 数据，v0.1.0 时采集） | 2026-10-17 |
+| 界面渲染（浏览器替代验证） | ✅ 已验证 | `docs/screenshots/ui-ready.png`、`ui-ec-unavailable.png`、`ui-need-admin.png`；规格见 `docs/qa/ui-smoke-spec.md` | 2026-10-24 |
 | 独立复审（reviewer 子代理） | ✅ 已验证 | 独立跑 `core` 46 / `app` bin 4 / 契约 8 / 两个 crate 的 fmt+clippy；产出 4 条 Required Changes（R1 限速锁未覆盖 IOCTL、R2 限速状态实例级、R3 台账超范围、R4 注释矛盾），**已全部修复** | 2026-10-24 |
 | 前后端端到端（UI 自动化） | 🚫 禁用 | 见 `docs/SPEC.md` §5.1（避免反复启停驱动硬件） | — |
 

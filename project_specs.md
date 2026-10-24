@@ -19,7 +19,7 @@
 | 名称 | Mechrevo-Max（机械革命自研控制台） |
 | 形态 | Windows x64 桌面应用（Rust `mechrevo-core` + Tauri v2） |
 | 仓库 | https://github.com/lza6/Mechrevo-Max |
-| 当前版本 | v0.1.3（护栏 + 复审修复 + 执行线程修正，已发布） |
+| 当前版本 | v0.1.4（护栏 + 复审修复 + 执行线程修正 + 可观测性/离线/可访问性，已发布） |
 | 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0`、`v0.1.1`、`v0.1.2` |
 | 规格基线 | `docs/SPEC.md`（安全红线在 §5.1） |
 
@@ -69,9 +69,9 @@
 | T-020-02 | 建 CI（GitHub Actions）并核对真实运行结果 | P2-02 | P2 | **done** | run 40098051184 → conclusion=success，13 步全 success（约 240s） |
 | T-020-03 | 命令改 `async fn` + `spawn_blocking`（根因：默认占 UI 线程） | P3-11 根因 | **P1** | **done** | `evidence/v0.1.3.json`；bin 单测 4→7；前端 37/37 复跑通过 |
 | T-020-04 | 修正 policy 覆盖率事实 + 门禁改为可验证形式 | P3-08 | P2 | **done** | 实测 86.56%；分支覆盖在 MSVC 不可用 → 改行覆盖 ≥95% + Err 分支约定 |
-| T-020-05 | release 下日志落盘 + panic hook（调研 N1） | N1 | **P1** | **todo** | 当前 `eprintln!` 必丢，Tauri 自身 20 处 `log::error!` 被丢弃 |
-| T-020-06 | WebView2 安装模式改 skip/offline（调研 N2） | N2 | P2 | **todo** | 默认 `DownloadBootstrapper` 需联网，离线机器装不上 |
-| T-020-07 | a11y 4 处修正（label/aria-valuetext/alert 常驻/tabs role） | N3 | P2 | **todo** | 需读屏实测确认播报 |
+| T-020-05 | release 下日志落盘 + panic hook + 失败常驻（调研 N1） | N1 | **P1** | **done** | `app/src-tauri/src/logging.rs`（按天滚动/保留 7 天/5MB 上限/失败静默）+ panic hook + `last_error` 回放；bin 单测 7→12 |
+| T-020-06 | WebView2 安装模式改 skip（调研 N2） | N2 | P2 | **done** | 默认 `DownloadBootstrapper` 需联网，离线机器装不上 |
+| T-020-07 | a11y 4 处修正（label/aria-valuetext/alert 常驻/tabs role） | N3 | P2 | **done** | 47 条浏览器断言含 6 条可访问性；真机读屏播报仍待验证 |
 
 ---
 

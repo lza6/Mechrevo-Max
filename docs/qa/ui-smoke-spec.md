@@ -24,7 +24,13 @@
 为跑一次冒烟引入 `package.json` + playwright 依赖会破坏该设计，因此断言以规格形式记录，
 执行走 MCP Playwright 或任意具备 Playwright 的环境。这是**已知边界**，不是遗漏。
 
-## 断言清单（本轮 37 条，全绿）
+## 第 4 轮增补（v0.1.4）：47 条
+
+新增 6 条可访问性断言（`aria-valuetext` 跟随数值、`label for` 而非包裹、`aria-describedby`、
+寄存器 `aria-label` 说人话、tabs 语义、常驻 `.sr-only` live 区播报）+ 2 条"失败原因常驻界面"
+（有 `last_error` 时显示 / 无错误时隐藏）。**47/47 通过，0 error。**
+
+## 断言清单（v0.1.3 时 37 条，全绿）
 
 ### 场景 1：EC 可用（14 条）
 

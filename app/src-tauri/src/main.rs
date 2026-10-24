@@ -14,6 +14,8 @@ use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
+mod logging;
+
 /// 最近一次改动，用于一键撤销.
 #[derive(Default)]
 struct UndoStack {
@@ -32,6 +34,40 @@ struct AppState {
     ec: Mutex<()>,
     /// 最近一次改动，用于一键撤销.
     undo: Mutex<UndoStack>,
+    /// 最近一次失败的原因 —— 让失败"留在界面上"而不是两秒后消失.
+    ///
+    /// 此前失败只写进状态栏，下一次轮询就把文案冲掉，用户回头看不出发生过什么。
+    /// 这里在成功操作时清空、失败时保留，由 `get_status` 回放给前端（回放而非一次性
+    /// `emit`：事件在监听未注册或窗口已销毁时会直接丢失，Tauri 不做重放）。
+    last_error: Mutex<Option<String>>,
+}
+
+/// 记录一次失败原因（锁中毒时静默忽略，不能让"记录错误"本身再炸一次）.
+fn record_error(state: &AppState, message: &str) {
+    if let Ok(mut slot) = state.last_error.lock() {
+        *slot = Some(message.to_owned());
+    }
+    log::warn!("操作失败: {message}");
+}
+
+/// 成功后清空失败原因.
+fn clear_last_error(state: &AppState) {
+    if let Ok(mut slot) = state.last_error.lock() {
+        *slot = None;
+    }
+}
+
+/// 读出当前失败原因（供 `get_status` 回放）.
+fn last_error(state: &AppState) -> Option<String> {
+    state.last_error.lock().ok().and_then(|slot| slot.clone())
+}
+
+/// 统一处理命令结果：成功清空、失败记录.
+fn note_result(state: &AppState, result: &Result<String, String>) {
+    match result {
+        Ok(_) => clear_last_error(state),
+        Err(message) => record_error(state, message),
+    }
 }
 
 /// 取 EC 访问锁 —— 锁中毒时给出可行动的提示，而不是 panic.
@@ -83,6 +119,8 @@ struct StatusPayload {
     office_power: Option<PowerLimitsDto>,
     can_undo_power: bool,
     can_undo_mode: bool,
+    /// 上一次失败的原因（成功后清空）.
+    last_error: Option<String>,
 }
 
 /// 功耗三元组的传输结构.
@@ -153,6 +191,7 @@ fn unavailable_with(
         office_power: None,
         can_undo_power,
         can_undo_mode,
+        last_error: None,
     }
 }
 
@@ -211,6 +250,7 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
             .map(PowerLimitsDto::from),
         can_undo_power,
         can_undo_mode,
+        last_error: last_error(state),
     }
 }
 
@@ -362,7 +402,9 @@ type SharedState<'a> = State<'a, Arc<AppState>>;
 
 /// 把后台任务失败转成用户可读文案.
 fn join_error(e: tauri::Error) -> String {
-    format!("内部任务异常（{e}），请重启本程序")
+    let message = format!("内部任务异常（{e}），请重启本程序");
+    log::error!("{message}");
+    message
 }
 
 /// 读取当前全部状态.
@@ -391,9 +433,12 @@ async fn get_status(state: SharedState<'_>) -> Result<StatusPayload, String> {
 async fn set_mode(state: SharedState<'_>, mode: String) -> Result<String, String> {
     let target = OperatingMode::from_key(&mode).ok_or_else(|| format!("未知档位: {mode}"))?;
     let worker_state = Arc::clone(state.inner());
-    tauri::async_runtime::spawn_blocking(move || switch_mode(&worker_state, target))
+    let recorder = Arc::clone(state.inner());
+    let result = tauri::async_runtime::spawn_blocking(move || switch_mode(&worker_state, target))
         .await
-        .map_err(join_error)?
+        .map_err(join_error)?;
+    note_result(&recorder, &result);
+    result
 }
 
 /// 设置某模式的默认功耗.
@@ -413,27 +458,38 @@ async fn set_power_limits(
     let limits = PowerLimits::new(pl1, pl2, pl4).map_err(|e| e.to_string())?;
 
     let worker_state = Arc::clone(state.inner());
-    tauri::async_runtime::spawn_blocking(move || apply_power_limits(&worker_state, target, limits))
-        .await
-        .map_err(join_error)?
+    let recorder = Arc::clone(state.inner());
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        apply_power_limits(&worker_state, target, limits)
+    })
+    .await
+    .map_err(join_error)?;
+    note_result(&recorder, &result);
+    result
 }
 
 /// 撤销最近一次功耗改动.
 #[tauri::command]
 async fn undo_power(state: SharedState<'_>) -> Result<String, String> {
     let worker_state = Arc::clone(state.inner());
-    tauri::async_runtime::spawn_blocking(move || undo_power_now(&worker_state))
+    let recorder = Arc::clone(state.inner());
+    let result = tauri::async_runtime::spawn_blocking(move || undo_power_now(&worker_state))
         .await
-        .map_err(join_error)?
+        .map_err(join_error)?;
+    note_result(&recorder, &result);
+    result
 }
 
 /// 撤销最近一次档位切换.
 #[tauri::command]
 async fn undo_mode(state: SharedState<'_>) -> Result<String, String> {
     let worker_state = Arc::clone(state.inner());
-    tauri::async_runtime::spawn_blocking(move || undo_mode_now(&worker_state))
+    let recorder = Arc::clone(state.inner());
+    let result = tauri::async_runtime::spawn_blocking(move || undo_mode_now(&worker_state))
         .await
-        .map_err(join_error)?
+        .map_err(join_error)?;
+    note_result(&recorder, &result);
+    result
 }
 
 /// 以管理员身份重新启动本程序（当前进程随即退出）.
@@ -445,6 +501,15 @@ async fn relaunch_elevated() -> Result<(), String> {
 }
 
 fn main() {
+    // 必须在任何可能失败的逻辑之前：release 下没有 stderr，日志是唯一的事后证据
+    let log_dir = logging::init();
+    logging::install_panic_hook();
+    log::info!(
+        "mechrevo-max {} 启动；日志目录 {:?}",
+        env!("CARGO_PKG_VERSION"),
+        log_dir
+    );
+
     enable_dpi_awareness();
 
     tauri::Builder::default()
@@ -632,5 +697,27 @@ mod tests {
         let state = AppState::default();
         let err = undo_mode_now(&state).unwrap_err();
         assert!(err.contains("没有可撤销的档位切换"), "实际: {err}");
+    }
+    #[test]
+    fn note_result_records_failure_and_clears_on_success() {
+        let state = AppState::default();
+        assert!(last_error(&state).is_none(), "初始不应有历史错误");
+
+        note_result(&state, &Err("写入校验失败 @ 0x0731".to_owned()));
+        assert_eq!(
+            last_error(&state).as_deref(),
+            Some("写入校验失败 @ 0x0731"),
+            "失败必须留在状态里，而不是两秒后被轮询冲掉"
+        );
+
+        note_result(&state, &Ok("已切换到狂暴档".to_owned()));
+        assert!(last_error(&state).is_none(), "成功后应清空历史错误");
+    }
+
+    #[test]
+    fn unavailable_payload_does_not_carry_stale_last_error() {
+        // EC 不可用是"当前状态"，不是"上一次失败"；不得把历史错误混进来误导用户
+        let payload = unavailable_with("driver", "EC 驱动未就绪".to_owned(), false, false);
+        assert!(payload.last_error.is_none());
     }
 }

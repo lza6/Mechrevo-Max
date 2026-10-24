@@ -42,9 +42,9 @@
 ## 第 3 轮调研新增（2026-10-24，explorer）
 | # | 项 | 级别 | 说明 |
 |---|---|---|---|
-| N1 | release 下**没有安装任何 logger** | P1 | `eprintln!` 因 `windows_subsystem="windows"` 必丢；Tauri 自身 9 个文件 20 处 `log::error!` 也全部被丢弃 |
-| N2 | WebView2 安装模式默认 `DownloadBootstrapper`（**需联网**） | P2 | 离线机器装不上；`tauri.conf.json` 未配置 `windows.webviewInstallMode` |
-| N3 | `label` 包住 `output` → 滑块可访问名随值漂移；缺 `aria-valuetext`；`role=alert`+`hidden` 播报不稳定；`.tabs` 无 `role` | P2 | 纯前端可修，播报需读屏实测 |
+| ~~N1~~ | ~~release 下没有安装任何 logger~~ | **已修（v0.1.4）** | `eprintln!` 因 `windows_subsystem="windows"` 必丢；Tauri 自身 9 个文件 20 处 `log::error!` 也全部被丢弃 |
+| ~~N2~~ | ~~WebView2 默认需联网~~ | **已修（v0.1.4，改 skip）** | 离线机器装不上；`tauri.conf.json` 未配置 `windows.webviewInstallMode` |
+| ~~N3~~ | ~~a11y 四处~~ | **已修（v0.1.4）**；剩余：真机读屏播报仍待验证 | ~~`label` 包住 `output` → 滑块可访问名随值漂移；缺 `aria-valuetext`；`role=alert`+`hidden` 播报不稳定；`.tabs` 无 `role` | P2 | 纯前端可修，播报需读屏实测 |
 | N4 | 依赖审计 | 信息 | `cargo-audit`：419 依赖 **0 漏洞**；2 条 informational（proc-macro-error 仅构建期、glib 仅 Linux） |
 | N5 | 自动更新评估 | 决策 | **建议不做**：违背离线承诺；私钥泄露=远程写 EC 能力且不可撤销；前置 MSI/NSIS 从未构建。改用「手动检查新版本」 |
 

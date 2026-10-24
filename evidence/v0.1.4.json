@@ -1,0 +1,102 @@
+{
+  "task_id": "v0.1.4",
+  "status": "passed",
+  "timestamp": "2026-10-24T22:55:00+08:00",
+  "scope": "把第 3 轮调研暴露的 P1/P2 缺口做完：release 下失败不可见（N1）、离线机器装不上（N2）、读屏念不懂（N3）；CI 硬化 + 工具链固定",
+  "trigger": "explorer 子代理调研结论 + 用户指示「能做就全部做完」",
+  "commands_executed": [
+    {
+      "cmd": "cd core && cargo test --offline",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 46 passed; 0 failed; 0 ignored (lib)\ntest result: ok. 0 passed; 0 failed; 7 ignored (hardware)\ntest result: ok. 1 passed (doctest)"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max",
+      "exit_code": 0,
+      "raw_output_tail": "running 12 tests\ntest logging::tests::prune_keeps_recent_logs ... ok\ntest logging::tests::prune_logs_older_than_removes_only_this_modules_files ... ok\ntest logging::tests::writes_line_to_file_and_increments_counter ... ok\ntest tests::note_result_records_failure_and_clears_on_success ... ok\ntest tests::unavailable_payload_does_not_carry_stale_last_error ... ok\n(其余 7 条沿用)\ntest result: ok. 12 passed; 0 failed"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --test ipc_contract",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 8 passed; 0 failed"
+    },
+    {
+      "cmd": "两个 crate 的 cargo clippy --offline --all-targets 与 cargo fmt --check",
+      "exit_code": 0,
+      "raw_output_tail": "clippy 无 warning:/error: 行（两个包均 0 warning）；fmt --check 两个包均 exit 0"
+    },
+    {
+      "cmd": "node --check app/ui/app.js",
+      "exit_code": 0,
+      "raw_output_tail": "(no output) js ok"
+    },
+    {
+      "cmd": "Playwright(Chromium) 47 条断言（5+1 场景 + 6 条可访问性 + 2 条持久错误 + 1 条失败态）",
+      "exit_code": 0,
+      "raw_output_tail": "{\"total\":47,\"failed\":[],\"errors\":[]}"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo build --release --offline",
+      "exit_code": 0,
+      "raw_output_tail": "   Compiling mechrevo-max v0.1.4 (...)\n    Finished `release` profile [optimized] target(s) in 1m 04s\na3c7a205bc2b15bd62e4d3e7de293a568e1768de191c402f69498bce8990d2a7  5129216"
+    }
+  ],
+  "changes": {
+    "N1_logging": {
+      "files": ["app/src-tauri/src/logging.rs（新）", "app/src-tauri/src/main.rs", "core/src/ec/mod.rs", "app/src-tauri/Cargo.toml", "core/Cargo.toml"],
+      "behavior": "日志写 %LOCALAPPDATA%\\Mechrevo-Max\\logs\\app-<天>.log（绝对路径，规避提权后 cwd=System32）；按天滚动、保留 7 天、单次运行上限 5MB；日志失败静默降级；装 panic::set_hook；RestoreGuard 的回滚失败改走 log::error 双写（eprintln 仅调试期可见）",
+      "why": "release 是 windows_subsystem=windows 无 stderr，此前关键告警与 Tauri 自身 20 处 log::error! 全部丢失"
+    },
+    "N1_last_error": {
+      "files": ["app/src-tauri/src/main.rs", "app/ui/index.html", "app/ui/app.js", "app/ui/style.css"],
+      "behavior": "AppState.last_error：失败记录 / 成功清空 / get_status 回放（不用一次性 emit）；前端新增常驻错误条 #persist-error",
+      "why": "此前失败只闪一下状态栏，2 秒后被轮询冲掉，用户回头看不出发生过什么"
+    },
+    "N2_webview": {
+      "files": ["app/src-tauri/tauri.conf.json", "docs/DEPLOYMENT.md"],
+      "behavior": "bundle.windows.webviewInstallMode = skip",
+      "why": "默认 DownloadBootstrapper 需联网，离线机器装不上；Win11 内置、Win10 随 Edge 推送"
+    },
+    "N3_a11y": {
+      "files": ["app/ui/index.html", "app/ui/style.css", "app/ui/app.js"],
+      "behavior": "label for= 关联（不再包裹 output）+ aria-describedby；滑块 aria-valuetext（「75 瓦，长时功耗墙 PL1」）；告警区外挂常驻 .sr-only aria-live=assertive；功耗 tab 补 role=tablist/tab/tabpanel + aria-controls；档位寄存器 aria-label 说人话",
+      "why": "读屏念「PL1 长时 45 45 45」与「七五一等于零 x 零零」；role=alert + hidden 切换播报不稳定"
+    },
+    "ci_hardening": {
+      "files": [".github/workflows/ci.yml", "rust-toolchain.toml（新）"],
+      "behavior": "Swatinem/rust-cache；permissions: contents: read；concurrency 取消旧运行；新增 coverage job（cargo llvm-cov 上报，continue-on-error）；新增 package job（tag/dispatch 时 npx tauri build 产出 msi/nsis 并上传 artifact）；工具链固定 1.95.0",
+      "why": "缓存 key 只看 Cargo.lock 会命中错误 target；package job 是关闭「MSI/NSIS 从未构建」的唯一手段"
+    }
+  },
+  "tests": [
+    { "name": "core 单测 + doctest", "type": "unit", "status": "passed", "evidence": "46 + 1 passed" },
+    { "name": "IPC 命令层 + 日志模块单测", "type": "unit", "status": "passed", "evidence": "12 passed（7→12）" },
+    { "name": "IPC 契约", "type": "integration", "status": "passed", "evidence": "8 passed" },
+    { "name": "前端浏览器断言", "type": "e2e", "status": "passed", "evidence": "47/47，pageerror/console.error 各 0" },
+    { "name": "clippy / fmt（两 crate）", "type": "lint", "status": "passed", "evidence": "0 warning / exit 0" },
+    { "name": "release 构建", "type": "build", "status": "passed", "evidence": "5129216 B" },
+    { "name": "真机读屏播报（NVDA/Narrator）", "type": "manual", "status": "blocked", "evidence": "用户在场才能测；已用 aria 属性静态断言 + 常驻 live 区降低风险" },
+    { "name": "真机硬件测试", "type": "integration", "status": "skipped", "evidence": "按 SPEC §5.1 不执行" }
+  ],
+  "coverage_summary": { "lines": 86.56, "branches": null, "functions": 85.94, "statements": null, "note": "core；本次未重跑 llvm-cov，沿用 2026-10-24 基线（新增日志模块在 app 侧，不进 core 统计）" },
+  "seams_touched": ["S8 前端交互（47 条断言）", "S10 版本号（三处 0.1.4）", "S11 命令执行线程（未改）"],
+  "mock_scenarios_covered": ["ec_ready", "driver_missing", "elevation_required", "lock_poison_restart", "unknown_mode_encoding", "slow_backend", "failing_action（set_mode 抛错）", "has_last_error"],
+  "browser_validation": {
+    "performed": true,
+    "engine": "Playwright / Chromium",
+    "paths": ["5 场景 + 未知编码 + 失败态 + 有 last_error 态，共 47 断言"],
+    "screenshots": ["docs/screenshots/ui-ready.png", "docs/screenshots/ui-ec-unavailable.png", "docs/screenshots/ui-need-admin.png"]
+  },
+  "artifact": {
+    "path": "app/src-tauri/target/release/mechrevo-max.exe",
+    "size_bytes": 5129216,
+    "sha256": "a3c7a205bc2b15bd62e4d3e7de293a568e1768de191c402f69498bce8990d2a7"
+  },
+  "limitations": [
+    "日志文件的实际落盘位置与内容，只在单测层面验证；真机（提权后 cwd=System32 场景）未实跑",
+    "真机读屏播报未验证（需用户在 NVDA/Narrator 下试）",
+    "package job 的 msi/nsis 产物需 CI 实际跑一次才算验证（本次随 tag 触发）",
+    "coverage job 只在 CI 上验证，本地未重跑",
+    "真机硬件链路（写后读回语义、撤销后固件是否重应用）仍未验证"
+  ]
+}

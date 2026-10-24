@@ -1738,8 +1738,9 @@ dependencies = [
 
 [[package]]
 name = "mechrevo-core"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
+ "log",
  "serde",
  "thiserror 2.0.21",
  "windows-sys 0.59.0",
@@ -1747,8 +1748,9 @@ dependencies = [
 
 [[package]]
 name = "mechrevo-max"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
+ "log",
  "mechrevo-core",
  "serde",
  "serde_json",

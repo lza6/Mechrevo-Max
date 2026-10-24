@@ -1,10 +1,11 @@
 name: CI
 
 # 存在意义：把 docs/DEPLOYMENT.md §7 的人工清单自动化，止住「改了代码没改文档 / 测试悄悄变红」这类漂移。
-# 注意：本 workflow **不跑**以下内容，原因是硬性的（见 docs/SPEC.md §5.1）：
-#   - 真机硬件测试（core/tests/hardware.rs 的 #[ignore]）—— CI 无硬件，且真机操作有硬复位风险
-#   - GUI E2E —— 用户明确禁用真机 UI 自动化
-#   - 覆盖率门禁 —— 尚无 cargo-llvm-cov 基线（v0.2.1 补）
+#
+# 刻意不做的（原因见 docs/SPEC.md §5.1 与 policy.md §7）：
+#   - 真机硬件测试（core/tests/hardware.rs 的 #[ignore]）：CI 无硬件，且真机写入有硬复位风险
+#   - GUI E2E：用户明确禁用真机 UI 自动化（改用 docs/qa/ui-smoke-spec.md 的浏览器方案）
+#   - 覆盖率作为**阻断门禁**：先上报（见 coverage job），等基线稳定后再收紧
 
 on:
   push:
@@ -13,6 +14,15 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+
+# 最小权限：本 workflow 只读仓库
+permissions:
+  contents: read
+
+# 同一分支的新推送取消旧运行，避免排队烧时间
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -27,22 +37,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      # 工具链按 rust-toolchain.toml 固定，避免「昨天绿今天红」
+      - name: Install Rust（读取 rust-toolchain.toml）
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: "1.95.0"
           components: rustfmt, clippy
 
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - name: Cache cargo（含 target 增量与 sparse index）
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            core/target
-            app/src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('core/Cargo.lock', 'app/src-tauri/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          workspaces: |
+            core -> target
+            app/src-tauri -> target
 
       - name: core · fmt
         working-directory: core
@@ -52,7 +59,7 @@ jobs:
         working-directory: core
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: core · test（46 单测 + doctest；真机测试保持 ignored）
+      - name: core · test（单测 + doctest；真机测试保持 ignored）
         working-directory: core
         run: cargo test
 
@@ -83,3 +90,67 @@ jobs:
             echo "::error::检测到被禁止入库的二进制/驱动文件:"; echo "$hits"; exit 1
           fi
           echo "合规检查通过：无官方二进制、驱动或反编译产物"
+
+  coverage:
+    name: coverage（core，仅上报）
+    runs-on: windows-latest
+    timeout-minutes: 25
+    continue-on-error: true # 先只上报不阻断；基线稳定后去掉这行即为门禁
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core -> target
+
+      - name: 安装 cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: 覆盖率摘要（core）
+        working-directory: core
+        run: cargo llvm-cov --summary-only --ignore-filename-regex 'ec/windows\.rs'
+
+  package:
+    name: 打包冒烟（msi/nsis）
+    # 只在打 tag 或手动触发时跑：这是唯一能真正验证 P2-08「安装包从未构建」的手段
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - name: 安装 Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      - name: 构建安装包（msi + nsis）
+        working-directory: app/src-tauri
+        run: npx tauri build
+
+      - name: 列出产物
+        shell: bash
+        run: |
+          find app/src-tauri/target/release/bundle -type f \( -name '*.msi' -o -name '*.exe' \) -printf '%p  %s bytes\n' || true
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: mechrevo-max-installers
+          path: |
+            app/src-tauri/target/release/bundle/msi/*.msi
+            app/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error

@@ -20,7 +20,7 @@
 |---|---|---|
 | `UWACPIDriver.sys` | 随机械革命官方控制台安装 | 本应用**不打包**该驱动 |
 | EC 设备已枚举 | 需手动触发一次 | 见下方「设备就绪」 |
-| WebView2 Runtime | Windows 10/11 通常已内置 | 若无则需安装 |
+| WebView2 Runtime | Windows 11 内置；Windows 10 随 Edge/系统更新推送 | **安装包不再自带下载器**（`bundle.windows.webviewInstallMode = "skip"`，为的是离线机器也能装上）。若目标机器确实没有运行时，应用起不来 —— 需手动装 WebView2 Evergreen Runtime 或改用官方控制台（它自带） |
 
 ### 设备就绪（**官方安装流程漏掉的一步**）
 

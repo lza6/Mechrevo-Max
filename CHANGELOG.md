@@ -45,6 +45,50 @@ WebView2 的 UI（主）线程上同步执行**，而 `get_status` 一轮约 14 
 
 ---
 
+## [0.1.4] — 2026-10-24
+
+把第 3 轮调研暴露的 3 个 P1/P2 缺口一次做掉：**release 下失败不可见**、**离线机器装不上**、**读屏念不懂**。
+
+### 修复
+
+- **N1（P1）日志落盘 + panic hook**：新增 `app/src-tauri/src/logging.rs`。
+  release 是 `windows_subsystem = "windows"`，没有 stderr —— 此前 `RestoreGuard` 的
+  「自动回滚失败，硬件可能停在中间状态」以及 Tauri 自身 20 处 `log::error!` **全部被丢弃**。
+  现在统一写入 `%LOCALAPPDATA%\Mechrevo-Max\logspp-<天>.log`（绝对路径，因为提权实例
+  的 cwd 可能是 `System32`），按天滚动、保留 7 天、单次运行上限 5 MB，日志失败静默降级不影响业务；
+  同时装 `panic::set_hook`，panic 也会落盘。
+- **N1（P1）失败原因常驻界面**：`AppState` 新增 `last_error`，失败时记录、成功时清空，
+  由 `get_status` **回放**（不用一次性 `emit` —— 监听未注册或窗口销毁时事件会直接丢）。
+  前端新增常驻错误条：此前失败只闪一下状态栏，2 秒后就被轮询冲掉，用户回头看不出发生过什么。
+- **N2（P2）离线可用**：`bundle.windows.webviewInstallMode = skip`。默认是
+  `DownloadBootstrapper`（**需联网**），对一个"离线工具"是隐性自毁：没有 WebView2 的机器装不上。
+  改为依赖机器已有运行时（Win11 内置、Win10 随 Edge 推送），并在 `docs/DEPLOYMENT.md` 写明前提。
+- **N3（P2）可访问性四处**：
+  ① 滑块 `<label>` 不再包住 `<output>`（原来可访问名会随数值漂移，读屏念「PL1 长时 45 45 45」），
+  改成 `label for=` + `aria-describedby`；② 滑块补 `aria-valuetext`（念「75 瓦，长时功耗墙 PL1」
+  而不是裸「75」）；③ 告警区外挂常驻 `.sr-only` `aria-live="assertive"` 区
+  （`role="alert"` + `hidden` 切换的播报不稳定）；④ 功耗 tab 补 `role="tablist"/"tab"/"tabpanel"`
+  与 `aria-controls`。档位原始寄存器也改成 `aria-label` 说人话。
+
+### 工程
+
+- **CI 硬化**：`Swatinem/rust-cache`（替代只按 Cargo.lock 哈希的手写 cache）、
+  `permissions: contents: read`、`concurrency` 取消旧运行、新增 **coverage job**
+  （`cargo llvm-cov` 上报，暂不阻断）、新增 **package job**（tag 或手动触发时真跑
+  `npx tauri build` 产出 msi/nsis 并上传 artifact —— 这是关闭 P2-08「安装包从未构建」的唯一手段）。
+- 新增 `rust-toolchain.toml` 固定 1.95.0，避免「昨天绿今天红」。
+
+### 测试
+
+- IPC 命令层单测 **7 → 12**（新增 3 条日志模块：落盘、只删本模块过期文件、保留新文件；
+  2 条失败可见性：`note_result` 记录/清空、`unavailable` 载荷不带陈旧错误）。
+- 前端断言 **37 → 47**：新增 6 条可访问性（`aria-valuetext`、`label for` 不包裹、
+  `aria-describedby`、寄存器 `aria-label`、tabs 语义、常驻 live 区播报）+ 2 条持久错误条 + 1 条失败态。
+  **47/47 通过，`pageerror`/`console.error` 各 0**。
+- core 46 + 1 doctest、契约 8、两个 crate clippy 0 warning、fmt 干净、release 构建成功。
+
+---
+
 ## [Unreleased]
 
 ### 工程化（2026-10-24，无代码改动，故未单独发版）

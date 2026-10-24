@@ -47,14 +47,16 @@
 | 项 | 状态 | 证据 | 最后改动 |
 |---|---|---|---|
 | IPC 契约测试（8 个） | ✅ 已验证 | `cargo test --test ipc_contract` → `8 passed` | 2026-10-24 |
-| IPC 命令层单测（7 个） | ✅ 已验证 | `cargo test --bin mechrevo-max` → `7 passed`（锁中毒→restart 提示、撤销栈容错、EC 访问串行化、`status_snapshot` 中毒路径、两条 undo 缺记录路径） | 2026-10-24 |
+| IPC 命令层单测（12 个） | ✅ 已验证 | `cargo test --bin mechrevo-max` → `12 passed`（锁/串行化/中毒/undo 缺记录 + 日志落盘与轮转 + 失败可见性） | 2026-10-24 |
+| 日志落盘与轮转 | ✅ 已验证 | `logging::tests`：写入含级别与内容、只删 `app-*.log` 且不碰其它文件、新文件保留 | 2026-10-24 |
+| 失败原因常驻 | ✅ 已验证 | `note_result` 失败记录/成功清空；`unavailable` 载荷不携带陈旧错误；前端常驻错误条 2 条断言 | 2026-10-24 |
 | release 构建 | ✅ 已验证 | `cargo build --release` → 成功，exe 4 992 512 B（4.76 MiB），sha256 `aa4bcaaf…beae9cc9` | 2026-10-24 |
 | 推送 | ✅ 已验证 | `git push origin main` → `898c4c2..1fe2a14`；`git ls-remote origin refs/heads/main` = `1fe2a14` | 2026-10-24 |
 | Release 发布 | ✅ 已验证 | `tools/publish_release.py` 依次创建 v0.1.1（4 992 512 B）与 **v0.1.2**（**4 994 048 B**）；API 复核 v0.1.0/v0.1.1/v0.1.2 均 `draft=false`、asset 大小与本地构建一致，`releases/latest` = v0.1.2 | 2026-10-24 |
 | 前端语法 | ✅ 已验证 | `node --check app/ui/app.js` → 通过 | 2026-10-24 |
 | 前端源码契约解析 | ✅ 已验证 | `frontend_source_ipc_table_matches_backend`：解析 `app.js` 的 `IPC` 表并与后端命令集双向比对；`no_raw_string_command_names_in_frontend` 禁止裸字符串命令名 | 2026-10-24 |
 | UI 元素 id 与 `ui` 映射一致性 | ✅ 静态确认 | 28 项逐一比对，全部匹配 | 2026-10-17 |
-| 前端渲染与交互（浏览器 + mock 后端） | ✅ 已验证 | Playwright(Chromium) + 假 `invoke`：37/37 断言通过，`pageerror`/`console.error` 各 0；覆盖 ready / 驱动缺失 / 权限不足 / 锁中毒 四态 + 滑块脏检查 + 轮询停启 + IPC 参数形状 | 2026-10-24 |
+| 前端渲染与交互（浏览器 + mock 后端） | ✅ 已验证 | Playwright(Chromium) + 假 `invoke`：**47/47** 断言通过（含 6 条可访问性），`pageerror`/`console.error` 各 0；覆盖 ready / 驱动缺失 / 权限不足 / 锁中毒 四态 + 滑块脏检查 + 轮询停启 + IPC 参数形状 | 2026-10-24 |
 | 可访问性 | ✅ 静态确认 | `:focus-visible` 覆盖按钮/滑块/tab；`role="status" aria-live` 状态栏；`role="alert"` 告警区；`prefers-reduced-motion` 降级 | 2026-10-24 |
 | 界面真实渲染（真机窗口） | ✅ 已验证 | 截图 `docs/screenshots/main.png`（显示真实 EC 数据，v0.1.0 时采集） | 2026-10-17 |
 | 界面渲染（浏览器替代验证） | ✅ 已验证 | `docs/screenshots/ui-ready.png`、`ui-ec-unavailable.png`、`ui-need-admin.png`；规格见 `docs/qa/ui-smoke-spec.md` | 2026-10-24 |

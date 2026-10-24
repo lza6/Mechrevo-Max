@@ -1,0 +1,5 @@
+# 固定工具链：避免「昨天绿今天红」。
+# core 用 edition 2024（隐式下限 rustc 1.85），本项目在 1.95.0 上完整验证。
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]

@@ -1,6 +1,6 @@
 [package]
 name = "mechrevo-core"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 description = "机械革命 (Mechrevo) 笔记本 EC/硬件控制核心库"
 license = "MIT"
@@ -9,6 +9,7 @@ repository = "https://github.com/lza6/Mechrevo-Max"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
+log = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

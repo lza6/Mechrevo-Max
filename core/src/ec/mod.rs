@@ -234,8 +234,13 @@ impl<T: EcTransport> Drop for RestoreGuard<'_, T> {
     fn drop(&mut self) {
         if let Some(point) = self.point.take() {
             match self.ec.restore(&point) {
-                Ok(n) => eprintln!("[ec-guard] 已自动回滚 {n} 个寄存器"),
-                Err(e) => eprintln!("[ec-guard] ⚠️ 自动回滚失败, 硬件可能停在中间状态: {e}"),
+                Ok(n) => log::info!("[ec-guard] 已自动回滚 {n} 个寄存器"),
+                // 这是全项目最关键的一条告警：硬件可能停在中间状态。
+                // release 下没有 stderr，必须经 log 落到文件（见 app 的 logging 模块）。
+                Err(e) => {
+                    eprintln!("[ec-guard] ⚠️ 自动回滚失败: {e}");
+                    log::error!("[ec-guard] ⚠️ 自动回滚失败, 硬件可能停在中间状态: {e}");
+                }
             }
         }
     }

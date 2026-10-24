@@ -64,7 +64,7 @@ pnputil.exe /scan-devices</pre>
         </div>
 
         <div class="rail-foot">
-          <div class="raw-fields mono" id="mode-raw">751=— · 7AB=—</div>
+          <div class="raw-fields mono" id="mode-raw" aria-label="档位原始寄存器值">751=— · 7AB=—</div>
           <button class="btn subtle" id="undo-mode" disabled>撤销档位切换</button>
         </div>
       </section>
@@ -109,28 +109,33 @@ pnputil.exe /scan-devices</pre>
         <section class="panel" aria-labelledby="power-heading">
           <div class="panel-head">
             <h2 id="power-heading">默认功耗墙</h2>
-            <div class="tabs" id="power-tabs">
-              <button class="tab" data-power-mode="gaming">游戏</button>
-              <button class="tab" data-power-mode="office">办公</button>
+            <div class="tabs" id="power-tabs" role="tablist" aria-labelledby="power-heading">
+              <button class="tab" role="tab" data-power-mode="gaming"
+                      aria-controls="sliders" aria-selected="true">游戏</button>
+              <button class="tab" role="tab" data-power-mode="office"
+                      aria-controls="sliders" aria-selected="false">办公</button>
             </div>
           </div>
 
-          <div class="sliders" id="sliders">
-            <label class="slider-row">
-              <span class="slider-label">PL1<em>长时</em></span>
-              <input type="range" id="pl1" min="5" max="200" step="1" />
+          <div class="sliders" id="sliders" role="tabpanel" aria-labelledby="power-heading">
+            <div class="slider-row">
+              <label class="slider-label" for="pl1">PL1<em>长时</em></label>
+              <input type="range" id="pl1" min="5" max="200" step="1"
+                     aria-describedby="pl1-out" />
               <output class="mono" id="pl1-out">—</output>
-            </label>
-            <label class="slider-row">
-              <span class="slider-label">PL2<em>短时</em></span>
-              <input type="range" id="pl2" min="5" max="200" step="1" />
+            </div>
+            <div class="slider-row">
+              <label class="slider-label" for="pl2">PL2<em>短时</em></label>
+              <input type="range" id="pl2" min="5" max="200" step="1"
+                     aria-describedby="pl2-out" />
               <output class="mono" id="pl2-out">—</output>
-            </label>
-            <label class="slider-row">
-              <span class="slider-label">PL4<em>峰值</em></span>
-              <input type="range" id="pl4" min="0" max="255" step="1" />
+            </div>
+            <div class="slider-row">
+              <label class="slider-label" for="pl4">PL4<em>峰值</em></label>
+              <input type="range" id="pl4" min="0" max="255" step="1"
+                     aria-describedby="pl4-out" />
               <output class="mono" id="pl4-out">—</output>
-            </label>
+            </div>
           </div>
 
           <div class="panel-actions">
@@ -148,9 +153,12 @@ pnputil.exe /scan-devices</pre>
     <!-- 底部状态 / 日志 -->
     <footer class="statusbar">
       <span id="status-msg" role="status" aria-live="polite">就绪</span>
+      <span id="persist-error" class="persist-error" role="status" aria-live="polite" hidden></span>
       <div class="spacer"></div>
       <span class="mono" id="clock">—</span>
     </footer>
+    <!-- 常驻 live 区：role="alert" + hidden 切换时播报不稳定，用它在树里稳定播报 -->
+    <div id="alert-live" class="sr-only" role="alert" aria-live="assertive"></div>
   </div>
 
   <script src="app.js"></script>

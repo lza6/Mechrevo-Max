@@ -67,6 +67,8 @@ const ui = {
   undoPower: el('undo-power'),
   resetPower: el('reset-power'),
   statusMsg: el('status-msg'),
+  persistError: el('persist-error'),
+  alertLive: el('alert-live'),
   clock: el('clock'),
   cpu: el('readout-cpu'),
   gpu: el('readout-gpu'),
@@ -156,11 +158,21 @@ function setSliders(limits) {
   syncSliderOutputs();
 }
 
+const SLIDER_SEMANTICS = [
+  { input: 'pl1', out: 'pl1Out', label: '长时功耗墙 PL1' },
+  { input: 'pl2', out: 'pl2Out', label: '短时功耗墙 PL2' },
+  { input: 'pl4', out: 'pl4Out', label: '峰值功耗墙 PL4' },
+];
+
 function syncSliderOutputs() {
-  ui.pl1Out.textContent = `${ui.pl1.value} W`;
-  ui.pl2Out.textContent = `${ui.pl2.value} W`;
-  ui.pl4Out.textContent = `${ui.pl4.value} W`;
-  [ui.pl1, ui.pl2, ui.pl4].forEach(paintRange);
+  for (const { input, out, label } of SLIDER_SEMANTICS) {
+    const node = ui[input];
+    const text = `${node.value} W`;
+    ui[out].textContent = text;
+    // 读屏不要念裸数字：给出单位与语义
+    node.setAttribute('aria-valuetext', `${node.value} 瓦，${label}`);
+    paintRange(node);
+  }
   updateDirty();
 }
 
@@ -181,6 +193,7 @@ function renderEc(ec) {
     ui.ecPill.dataset.state = 'ready';
     ui.ecText.textContent = 'EC 已连接';
     ui.alert.hidden = true;
+    ui.alertLive.textContent = '';
     return;
   }
 
@@ -189,6 +202,7 @@ function renderEc(ec) {
   ui.ecText.textContent = 'EC 未连接';
   ui.alertMsg.textContent = ec.message;
   ui.alert.hidden = false;
+  ui.alertLive.textContent = `${ui.alertTitle.textContent}：${ec.message}`;
 
   // 权限不足 / 内部状态异常 → 一键重启；驱动未就绪 → 给出命令行步骤
   const needsElevation = ec.hint === 'elevation';
@@ -259,8 +273,22 @@ function renderStatus(s) {
     ui.modeRaw.textContent =
       `751=0x${a.toString(16).toUpperCase().padStart(2, '0')} · ` +
       `7AB=0x${b.toString(16).toUpperCase().padStart(2, '0')}`;
+    // 读屏念 "七五一等于零 x 零零" 没有意义，给一句人话
+    ui.modeRaw.setAttribute('aria-label', `档位原始寄存器：751 为 ${a}，7AB 为 ${b}`);
   } else {
     ui.modeRaw.textContent = '751=— · 7AB=—';
+    ui.modeRaw.setAttribute('aria-label', '档位原始寄存器：无数据');
+  }
+
+  // 上一次失败要留在界面上（轮询会不断刷状态栏，历史错误不能跟着消失）
+  if (s.last_error) {
+    ui.persistError.hidden = false;
+    ui.persistError.textContent = `上次操作失败：${s.last_error}`;
+    ui.persistError.title = s.last_error;
+  } else {
+    ui.persistError.hidden = true;
+    ui.persistError.textContent = '';
+    ui.persistError.title = '';
   }
 
   baseline.gaming = s.gaming_power;

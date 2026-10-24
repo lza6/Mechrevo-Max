@@ -56,5 +56,20 @@
     "风扇曲线只做只读展示：配对为数据特征候选，未与官方 UserFanTables 交叉核对",
     "真实应用里点「读取曲线」这一步未做 UI 自动化（WebView2 内容点击未接线）；曲线渲染在浏览器端用真机字节验证",
     "写曲线能力明确不做（风险高）"
-  ]
+  ],
+  "release": {
+    "tag": "v0.4.0",
+    "url": "https://github.com/lza6/Mechrevo-Max/releases/tag/v0.4.0",
+    "verified_at": "2026-10-25T00:14:41+08:00"
+  },
+  "ci": {
+    "head_sha": "8f3a44e",
+    "conclusion": "success",
+    "jobs": [
+      "build · test · lint",
+      "coverage（core）",
+      "打包冒烟（msi/nsis）"
+    ],
+    "verified_at": "2026-10-25T00:14:41+08:00"
+  }
 }

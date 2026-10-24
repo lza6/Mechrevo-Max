@@ -19,8 +19,8 @@
 | 名称 | Mechrevo-Max（机械革命自研控制台） |
 | 形态 | Windows x64 桌面应用（Rust `mechrevo-core` + Tauri v2） |
 | 仓库 | https://github.com/lza6/Mechrevo-Max |
-| 当前版本 | v0.5.0（分区式界面 + 免驱扩展数据 + 曲线自动加载；已发布） |
-| 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0` ～ `v0.5.0`（审计修复版待发布） |
+| 当前版本 | v0.5.1（采样与降级修复；已创建 Release，CI 待核对） |
+| 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0` ～ `v0.5.1` |
 | 规格基线 | `docs/SPEC.md`（安全红线在 §5.1） |
 
 ---
@@ -142,3 +142,9 @@
 | 门禁 | `policy.md` |
 | 接缝与测试台账 | `test_ledger.md` |
 | 前端冒烟规格 | `docs/qa/ui-smoke-spec.md` |
+
+| T-051-01 | 外部采样与 EC 解耦、超时与未知值修复 | 用户审计 | P1 | **done** | 独立 reviewer Approve；采样 11 fixture；EC 失败仍显示免驱数据 |
+| T-051-02 | 电池温度单位与 EC read_block 边界 | reviewer | P1 | **done** | 2982→25°C fixture；越界与上界单测通过 |
+| T-051-03 | 前端降级、危险确认、范围单一事实源、诊断字段 | 用户审计 | P1 | **done** | `tools/qa_browser.cjs` 21/21；取消不发 IPC、确认才发 |
+| T-051-04 | 历史文档纠偏、归档、技能/记忆补齐 | 用户审计 | P2 | **done** | 39 个已跟踪 md 审计；仅历史单轮审计备份归档，manifest 有回滚 |
+| T-051-05 | v0.5.1 构建、CI、Release | 用户授权发布 | P1 | **doing** | 本地构建哈希 `dc2c0330…0e56`；Release `draft=false`；CI 结果待回填 |

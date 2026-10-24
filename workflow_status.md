@@ -467,3 +467,9 @@ Office: PowerLimits { pl1: 45, pl2: 45, pl4: 200 }
 - 文档归档 manifest：`docs/archive/plans/20261025/archive-manifest.md`；历史审计保留可回滚副本。
 - 报告：`reports/change-report-2026-10-24.html` 第 13 节，5/5 自测（实际逐题核对）；HTML 标签配对通过。
 - 发布状态：本地验证和独立 Approve 已完成，开始提交/推送/CI/Release；**CI 未通过前不宣称远端发布验证完成**。
+
+### Release v0.5.1（API 已复核，CI 进行中）
+
+- commit：`c40616c`；tag：`v0.5.1`；已推送。
+- [Release v0.5.1](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.5.1)：API 返回 `draft=false`，`mechrevo-max.exe` **5,395,456 B**，与本地 SHA256 `dc2c0330…0e56` 对应。
+- CI：已启动，等待三个 job 真实完成；package 产物随后上传，未上传前不宣称完整发布。

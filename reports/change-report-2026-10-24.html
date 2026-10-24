@@ -416,6 +416,35 @@ GPU 用 <code>nvidia-smi</code>（走 NVAPI，<strong>不经过 EC</strong>，�
     <details><summary>答案</summary><p><strong>错。</strong>bit6 是强冷位，与档位共用字节；屏蔽后仍是「均衡」。</p></details></li>
 </ol>
 
+
+<h2>12. v0.3.0：把黑匣子拆开（回应"不够专业"）</h2>
+<p>这一版几乎没有新增硬件知识，全部是把**已经能读到**的东西正确呈现，加两个用户真正要的开关。</p>
+<table>
+  <thead><tr><th>用户说</th><th>做了什么</th></tr></thead>
+  <tbody>
+    <tr><td>「强冷那些开关能集成吗」</td><td>强冷 = <code>0x751</code> bit6，做成 switch：读改写（只动 bit6，不破坏档位位）+ 写后校验 + 失败回滚 + 独立撤销</td></tr>
+    <tr><td>「按钮太少、不专业」</td><td>新增 4 个面板：传感器表 / 功耗墙 / 自定义配置 / 寄存器浏览器</td></tr>
+    <tr><td>「当前什么档位不清楚」</td><td>位域解释：<code>751=0x40</code> → 「档位编码 0x00 → 均衡 / bit6 强冷 开（0x40）」</td></tr>
+    <tr><td>「温度更新频率没显示」</td><td>顶栏「间隔 2.0s · 实测 x.xs · N 次」+ 面板「已采样 N 次 · 上次 x 秒前」+ 清零统计</td></tr>
+    <tr><td>「默认就有模式，我没设置过」</td><td>明确写「档位由机器固件/EC 决定，本程序仅读取；启动时不会写入」</td></tr>
+    <tr><td>「模式不能自定义吗」</td><td>自定义配置：功耗墙 + 强冷存成一组，一键套用（最多 32 条）</td></tr>
+    <tr><td>「PL1/PL2 没显示系统当前值」</td><td>诚实回答：那要读 Intel MSR 0x610，<strong>用户态无权</strong>；HWiNFO 靠自带内核驱动。我们只显示 EC 的默认功耗寄存器，并把这个边界写在界面上</td></tr>
+    <tr><td>「黑匣子太多」</td><td>寄存器浏览器（任意地址只读 + 区间 + CSV 导出）、传感器最小/平均/最大、位域解释</td></tr>
+  </tbody>
+</table>
+
+<h3>真机抓到的两个问题</h3>
+<div class="note danger"><strong>1. 固件偶发丢写。</strong>强冷往返测试第一次就撞上：前向写成功、紧接着的回滚写被丢（读回仍是旧值）。
+排除时序（0–200 ms 连写都能成）、权限、提交寄存器后，判定是<strong>固件偶发行为</strong>（重跑 3/3 通过）。
+修法：对固定目标值加<strong>有界重试</strong>（最多 3 次「写+读回」，幂等安全），单测用「丢弃前 N 次写」的假传输层覆盖两种结局。</div>
+<div class="note"><strong>2. 布局被裁。</strong>4 个面板塞进原来为 2 个面板设计的固定 grid：传感器表只露 2 行、功耗墙被压成一条。
+改成右栏竖排 + 整栏滚动。这是只有真机截图才能发现的错——浏览器断言当时是绿的（元素都在，只是被裁）。</div>
+
+<h3>验证</h3>
+<p>core <strong>60</strong> 单测 + 1 doctest · IPC 层 <strong>20</strong> · 契约 8（13 命令）· 前端 <strong>43</strong> 条断言 ·
+真机强冷往返 <strong>3/3</strong>（结束后 <code>0x751=0x40</code> 与开工一致）· 两 crate clippy 0 warning / fmt 干净 ·
+release 5 297 152 B。真实截图：<code>docs/screenshots/app-live-window.png</code>，内存 47.4 MB。</p>
+
 <footer>
   生成时间 2026-10-24 · 数据来自 <code>evidence/v0.1.1.json</code>、<code>evidence/v0.1.2.json</code>、<code>evidence/qa-round3.json</code> 的真实命令输出 ·
   计划与问题清单见 <code>docs/计划书/下一步改进指南.md</code> · 规则见 <code>AGENTS.md</code>

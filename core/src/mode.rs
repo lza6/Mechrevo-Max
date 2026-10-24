@@ -286,6 +286,129 @@ mod tests {
         );
     }
 
+    /// 模拟真机上观察到的「偶发丢一次写」：前 n 次写被忽略，之后正常。
+    struct DropFirstWrites {
+        inner: MockTransport,
+        drops_left: std::sync::atomic::AtomicUsize,
+    }
+
+    impl DropFirstWrites {
+        fn new(drops: usize) -> Self {
+            Self {
+                inner: MockTransport::new(),
+                drops_left: std::sync::atomic::AtomicUsize::new(drops),
+            }
+        }
+    }
+
+    impl EcTransport for DropFirstWrites {
+        fn read_ec(&self, addr: u16) -> crate::Result<u8> {
+            self.inner.read_ec(addr)
+        }
+        fn write_ec(&self, addr: u16, value: u8) -> crate::Result<()> {
+            use std::sync::atomic::Ordering;
+            if self.drops_left.load(Ordering::SeqCst) > 0 {
+                self.drops_left.fetch_sub(1, Ordering::SeqCst);
+                return Ok(()); // 静默丢弃，模拟固件行为
+            }
+            self.inner.write_ec(addr, value)
+        }
+    }
+
+    #[test]
+    fn fan_boost_retries_when_firmware_drops_a_write() {
+        let ec = Ec::new(DropFirstWrites::new(1));
+        let ctl = ModeController::new(&ec);
+        // 第一次写被丢弃 → 重试后应成功
+        ctl.set_fan_boost(true).unwrap();
+        assert_eq!(ec.read(ns::MODE_FIELD_1.addr).unwrap(), 0x40);
+    }
+
+    #[test]
+    fn fan_boost_gives_up_after_bounded_retries() {
+        // 连续丢弃 3 次 = 超过重试上限 → 必须报错，且回滚到原值
+        let ec = Ec::new(DropFirstWrites::new(3));
+        let ctl = ModeController::new(&ec);
+        let err = ctl.set_fan_boost(true).unwrap_err();
+        assert!(
+            matches!(err, crate::Error::VerifyMismatch { addr, .. } if addr == ns::MODE_FIELD_1.addr)
+        );
+        assert_eq!(
+            ec.read(ns::MODE_FIELD_1.addr).unwrap(),
+            0x00,
+            "失败后应保持原值"
+        );
+    }
+
+    #[test]
+    fn reads_fan_boost_bit() {
+        let t = MockTransport::new();
+        t.seed(ns::MODE_FIELD_1.addr, 0x40); // 强冷开 + 均衡
+        let ec = Ec::new(t);
+        assert!(ModeController::new(&ec).fan_boost().unwrap());
+
+        let t = MockTransport::new();
+        t.seed(ns::MODE_FIELD_1.addr, 0x00);
+        let ec = Ec::new(t);
+        assert!(!ModeController::new(&ec).fan_boost().unwrap());
+    }
+
+    #[test]
+    fn set_fan_boost_only_touches_bit6() {
+        // 均衡(0x00) → 强冷开(0x40) → 关回(0x00)
+        let t = MockTransport::new();
+        t.seed(ns::MODE_FIELD_1.addr, 0x00);
+        let ec = Ec::new(t);
+        let ctl = ModeController::new(&ec);
+
+        ctl.set_fan_boost(true).unwrap();
+        assert_eq!(ec.read(ns::MODE_FIELD_1.addr).unwrap(), 0x40);
+        ctl.set_fan_boost(false).unwrap();
+        assert_eq!(ec.read(ns::MODE_FIELD_1.addr).unwrap(), 0x00);
+    }
+
+    #[test]
+    fn set_fan_boost_preserves_mode_bits() {
+        // 办公(0xA0) + 强冷 = 0xE0；关掉后必须回到 0xA0，不能变成 0x00
+        let t = MockTransport::new();
+        t.seed(ns::MODE_FIELD_1.addr, 0xA0);
+        let ec = Ec::new(t);
+        let ctl = ModeController::new(&ec);
+
+        ctl.set_fan_boost(true).unwrap();
+        assert_eq!(ec.read(ns::MODE_FIELD_1.addr).unwrap(), 0xE0);
+        assert_eq!(ctl.current().unwrap(), Some(OperatingMode::Office));
+
+        ctl.set_fan_boost(false).unwrap();
+        assert_eq!(ec.read(ns::MODE_FIELD_1.addr).unwrap(), 0xA0);
+    }
+
+    #[test]
+    fn fan_boost_rolls_back_when_register_is_stuck() {
+        let t = MockTransport::new().with_stuck(ns::MODE_FIELD_1.addr);
+        t.seed(ns::MODE_FIELD_1.addr, 0x00);
+        let ec = Ec::new(t);
+        let err = ModeController::new(&ec).set_fan_boost(true).unwrap_err();
+        assert!(matches!(err, crate::Error::VerifyMismatch { .. }));
+        assert_eq!(
+            ec.read(ns::MODE_FIELD_1.addr).unwrap(),
+            0x00,
+            "失败后必须回到原值"
+        );
+    }
+
+    #[test]
+    fn fan_boost_change_can_be_undone() {
+        let t = MockTransport::new();
+        t.seed(ns::MODE_FIELD_1.addr, 0x00);
+        let ec = Ec::new(t);
+        let ctl = ModeController::new(&ec);
+        let change = ctl.set_fan_boost(true).unwrap();
+        assert_eq!(ec.read(ns::MODE_FIELD_1.addr).unwrap(), 0x40);
+        change.undo(&ec).unwrap();
+        assert_eq!(ec.read(ns::MODE_FIELD_1.addr).unwrap(), 0x00);
+    }
+
     #[test]
     fn rollback_point_excludes_commit_register() {
         // 提交寄存器写入后自清零, 没有"原始值"可还原; 纳入快照会让撤销去写命令寄存器.
@@ -316,5 +439,106 @@ mod tests {
         }
         assert_eq!(OperatingMode::from_key("unknown"), None);
         assert_eq!(OperatingMode::from_key(""), None);
+    }
+}
+
+/// 强冷（Fan Boost）在 `0x0751` 上的位号.
+pub const FAN_BOOST_BIT: u8 = 6;
+
+/// 写入该寄存器允许的重试次数.
+///
+/// 真机实测（2026-10-24）：强冷位**偶发被 EC 丢弃一次** —— 4 次往返尝试中出现 1 次，
+/// 且是"前向写入成功、紧接着的回滚写入读回仍是旧值"，之后重试立刻成功。
+/// 目标是固定值的幂等写（写 0x40 两次与一次等价），因此这里做**有界重试**：
+/// 最多 [`WRITE_ATTEMPTS`] 次「写 + 读回」，任一成功即返回；全部失败才报错并回滚。
+const WRITE_ATTEMPTS: usize = 3;
+
+/// 重试之间的间隔.
+const WRITE_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// 写一个固定目标值并读回校验，允许少量重试（见 [`WRITE_ATTEMPTS`] 的实测依据）.
+fn write_settled<T: EcTransport>(ec: &Ec<T>, addr: u16, value: u8) -> Result<()> {
+    let mut last_actual = 0u8;
+    for attempt in 0..WRITE_ATTEMPTS {
+        ec.write_unverified(addr, value)?;
+        last_actual = ec.read(addr)?;
+        if last_actual == value {
+            return Ok(());
+        }
+        log::warn!(
+            "0x{addr:04X} 写入 0x{value:02X} 未生效（读回 0x{last_actual:02X}），第 {}/{} 次",
+            attempt + 1,
+            WRITE_ATTEMPTS
+        );
+        std::thread::sleep(WRITE_RETRY_DELAY);
+    }
+    Err(crate::Error::VerifyMismatch {
+        addr,
+        expected: value,
+        actual: last_actual,
+    })
+}
+
+/// 一次强冷开关改动的记录.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FanBoostChange {
+    /// 改成了开还是关.
+    pub enabled: bool,
+    /// 改动前的寄存器快照.
+    pub rollback: crate::ec::RollbackPoint,
+}
+
+impl FanBoostChange {
+    /// 撤销这次强冷开关.
+    ///
+    /// # Errors
+    /// 写回失败时返回错误.
+    pub fn undo<T: EcTransport>(&self, ec: &Ec<T>) -> Result<usize> {
+        ec.restore(&self.rollback)
+    }
+}
+
+impl<T: EcTransport> ModeController<'_, T> {
+    /// 读取当前是否开启强冷（`0x0751` 的 bit6）.
+    ///
+    /// # Errors
+    /// 读失败时返回错误.
+    pub fn fan_boost(&self) -> Result<bool> {
+        let value = self.ec.read(ns::MODE_FIELD_1.addr)?;
+        Ok(value & (1 << FAN_BOOST_BIT) != 0)
+    }
+
+    /// 开关强冷.
+    ///
+    /// 与档位共用 `0x0751`，因此必须**读改写**：只动 bit6，其它位原样保留
+    /// （否则会把档位字段一起清掉）。写入后读回校验，失败自动回滚。
+    ///
+    /// # Errors
+    /// 写入或校验失败时返回错误；已改动会被自动还原.
+    pub fn set_fan_boost(&self, enabled: bool) -> Result<FanBoostChange> {
+        let addr = ns::MODE_FIELD_1.addr;
+        let mask = 1u8 << FAN_BOOST_BIT;
+        let rollback = self.ec.snapshot(
+            &[addr],
+            if enabled {
+                "开启强冷"
+            } else {
+                "关闭强冷"
+            },
+        )?;
+
+        let current = self.ec.read(addr)?;
+        let next = if enabled {
+            current | mask
+        } else {
+            current & !mask
+        };
+
+        if let Err(e) = write_settled(self.ec, addr, next) {
+            let _ = self.ec.restore(&rollback);
+            return Err(e);
+        }
+
+        Ok(FanBoostChange { enabled, rollback })
     }
 }

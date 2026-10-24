@@ -21,7 +21,7 @@
 
 | 项 | 状态 | 证据 | 最后改动 |
 |---|---|---|---|
-| 单元测试（49 个） | ✅ 已验证 | `cargo test` → `49 passed; 0 failed` | 2026-10-24 |
+| 单元测试（60 个） | ✅ 已验证 | `cargo test` → `60 passed; 0 failed` | 2026-10-24 |
 | clippy 全目标（**scope: core + app 两个 crate**） | ✅ 已验证 | `cargo clippy --all-targets` → 两个包均 0 warning | 2026-10-24 |
 | 格式化（**scope: core + app 两个 crate**） | ✅ 已验证 | `cargo fmt --check` → 两个包均 exit 0 | 2026-10-24 |
 | 文档测试 | ✅ 已验证 | `cargo test` → `1 passed`（doctest） | 2026-10-24 |
@@ -47,7 +47,7 @@
 | 项 | 状态 | 证据 | 最后改动 |
 |---|---|---|---|
 | IPC 契约测试（8 个） | ✅ 已验证 | `cargo test --test ipc_contract` → `8 passed` | 2026-10-24 |
-| IPC 命令层单测（12 个） | ✅ 已验证 | `cargo test --bin mechrevo-max` → `12 passed`（锁/串行化/中毒/undo 缺记录 + 日志落盘与轮转 + 失败可见性） | 2026-10-24 |
+| IPC 命令层单测（20 个） | ✅ 已验证 | `cargo test --bin mechrevo-max` → `20 passed`（锁/串行化/中毒/undo + 日志 + 失败可见性 + 配置持久化 6 + 寄存器边界 2） | 2026-10-24 |
 | 日志落盘与轮转 | ✅ 已验证 | `logging::tests`：写入含级别与内容、只删 `app-*.log` 且不碰其它文件、新文件保留 | 2026-10-24 |
 | 失败原因常驻 | ✅ 已验证 | `note_result` 失败记录/成功清空；`unavailable` 载荷不携带陈旧错误；前端常驻错误条 2 条断言 | 2026-10-24 |
 | release 构建 | ✅ 已验证 | `cargo build --release` → 成功，exe 4 992 512 B（4.76 MiB），sha256 `aa4bcaaf…beae9cc9` | 2026-10-24 |
@@ -98,6 +98,8 @@
 | 真实 GUI 端到端 | ✅ 已验证 | 启动真实 exe（单次启动）→ 界面实录 CPU 72 °C / GPU 43 °C / 风扇 5486·5250 RPM / 均衡档高亮 / `751=0x40` 强冷态仍正确识别；内存 62.6 MB；截图 `docs/screenshots/app-live-window.png` | 2026-10-24 |
 | release 日志落盘 | ✅ 已验证 | `%LOCALAPPDATA%\Mechrevo-Max\logspp-*.log` 出现启动行（release 无 stderr） | 2026-10-24 |
 | 强冷位不破坏档位识别 | ✅ 已验证 | 真机 `751=0x40` → 界面正确高亮「均衡」；单测覆盖 0x40/0x50/0xE0 | 2026-10-24 |
+| 强冷开关真机往返（含回滚） | ✅ 已验证 | `fan_boost_roundtrip` 3/3 通过：`0x40→0x00→0x40`，档位编码不变，结束状态与开工一致 | 2026-10-24 |
+| 固件偶发丢写 → 有界重试 | ✅ 已验证 | 首次真机测试撞到 1 次丢写（4 次尝试中 1 次）；排除时序/权限/提交寄存器假设；加最多 3 次「写+读回」重试；单测用「丢弃前 N 次写」的假传输层覆盖 | 2026-10-24 |
 | 压力测试（CPU/GPU 满载、EC 泛洪） | 🚫 禁用 | 曾导致硬复位，见 `docs/SPEC.md` §5.1 |
 
 **真机验证频率建议**：仅在你主动要求且机器空闲时做，优先用 `ec_health.py`（限速只读）。

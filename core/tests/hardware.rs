@@ -141,6 +141,44 @@ fn real_write_then_restore() {
 }
 
 #[test]
+#[ignore = "需要真机 + 管理员权限, 会短暂改变强冷位"]
+fn fan_boost_roundtrip() {
+    // 强冷 = 0x751 的 bit6。这里做「读原值 → 翻转 → 校验 → 翻转回 → 校验复原」，
+    // 全程带 snapshot + RAII 守卫，任何一步失败都会还原。
+    use mechrevo_core::{ModeController, OperatingMode};
+
+    let ec = ec();
+    let ctl = ModeController::new(&ec);
+
+    let original = ctl.fan_boost().expect("读取强冷状态失败");
+    let (f1, f2) = ctl.raw_fields().expect("读取档位字段失败");
+    println!("当前强冷 = {original} (751=0x{f1:02X}, 7AB=0x{f2:02X})");
+
+    let change = ctl.set_fan_boost(!original).expect("翻转强冷失败");
+    let mut guard = ec.guard(change.rollback.clone());
+    let flipped = ctl.fan_boost().expect("读回失败");
+    println!(
+        "翻转后强冷 = {flipped} (751=0x{:02X})",
+        ctl.raw_fields().unwrap().0
+    );
+    assert_eq!(flipped, !original, "强冷位未按预期翻转");
+
+    // 档位编码必须保持不变（只动 bit6）
+    assert_eq!(
+        ctl.current().expect("读回档位失败"),
+        OperatingMode::from_field1(f1),
+        "翻转强冷不应改变档位编码"
+    );
+
+    let restored = guard.restore_now().expect("回滚失败");
+    println!("回滚 {restored} 个寄存器");
+
+    let (n1, n2) = ctl.raw_fields().expect("最终读取失败");
+    println!("最终 751=0x{n1:02X}, 7AB=0x{n2:02X}");
+    assert_eq!((n1, n2), (f1, f2), "0x751/0x7AB 必须完全复原");
+}
+
+#[test]
 #[ignore = "需要真机 + 管理员权限, 会短暂改变风扇/功耗档位"]
 fn mode_switch_roundtrip() {
     use mechrevo_core::{ModeController, OperatingMode};

@@ -28,6 +28,10 @@
           <span class="pill-label">项目 ID</span>
           <span class="pill-value mono" id="project-id">—</span>
         </div>
+        <div class="pill ghost" title="界面每 2 秒从硬件读一次；这里显示实际采样情况">
+          <span class="pill-label">采样</span>
+          <span class="pill-value mono" id="sample-info">—</span>
+        </div>
       </div>
     </header>
 
@@ -45,7 +49,7 @@ pnputil.exe /scan-devices</pre>
 
     <main class="stage" id="stage">
 
-      <!-- 左：档位 -->
+      <!-- 左栏：档位 + 强冷 -->
       <section class="rail" aria-labelledby="mode-heading">
         <h2 class="rail-title" id="mode-heading">运行档位</h2>
         <div class="mode-list" id="mode-list">
@@ -63,104 +67,100 @@ pnputil.exe /scan-devices</pre>
           </button>
         </div>
 
+        <!-- 位域解释：把"黑匣子"拆开给用户看 -->
+        <div class="bitfield">
+          <div class="bitfield-head">
+            <span class="mono" id="mode-raw">751=— · 7AB=—</span>
+            <span class="bitfield-note">档位字段原始值</span>
+          </div>
+          <dl class="bitfield-rows">
+            <div><dt>档位编码</dt><dd id="bf-mode">—</dd></div>
+            <div><dt>bit6 强冷</dt><dd id="bf-fanboost">—</dd></div>
+          </dl>
+          <p class="hint" id="mode-source">档位由机器固件/EC 决定，本程序仅读取；启动时不会写入。</p>
+        </div>
+
         <div class="rail-foot">
-          <div class="raw-fields mono" id="mode-raw" aria-label="档位原始寄存器值">751=— · 7AB=—</div>
-          <button class="btn subtle" id="undo-mode" disabled>撤销档位切换</button>
+          <label class="switch" for="fan-boost">
+            <input type="checkbox" id="fan-boost" />
+            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+            <span class="switch-label">强冷模式<em>0x751 bit6</em></span>
+          </label>
+          <div class="row-actions">
+            <button class="btn subtle" id="undo-mode" disabled>撤销档位</button>
+            <button class="btn subtle" id="undo-fan" disabled>撤销强冷</button>
+          </div>
         </div>
       </section>
 
-      <!-- 右：读数 + 功耗 -->
+      <!-- 右栏 -->
       <section class="stage-main">
 
-        <div class="readouts">
-          <article class="readout" id="readout-cpu-temp">
-            <header>
-              <span class="readout-label">CPU 温度</span>
-              <span class="readout-state" data-role="state">—</span>
-            </header>
-            <div class="readout-value">
-              <span class="num mono" data-role="value">—</span>
-              <span class="unit">°C</span>
-            </div>
-            <div class="readout-note" data-role="note">—</div>
-          </article>
+        <!-- 传感器表（HWiNFO 风格：当前 / 最小 / 平均 / 最大） -->
+        <section class="panel" aria-labelledby="sensors-heading">
+          <div class="panel-head">
+            <h2 id="sensors-heading">传感器</h2>
+            <span class="panel-meta" id="sensors-meta">—</span>
+          </div>
+          <table class="sensors" id="sensor-table">
+            <thead>
+              <tr>
+                <th scope="col">项目</th>
+                <th scope="col">当前</th>
+                <th scope="col">最小</th>
+                <th scope="col">平均</th>
+                <th scope="col">最大</th>
+                <th scope="col">状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-sensor="cpu_temp"><th scope="row">CPU 温度</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
+              <tr data-sensor="gpu_temp"><th scope="row">GPU 温度</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
+              <tr data-sensor="cpu_fan"><th scope="row">CPU 风扇</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
+              <tr data-sensor="gpu_fan"><th scope="row">GPU 风扇</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
+              <tr data-sensor="power_src"><th scope="row">供电</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
+            </tbody>
+          </table>
+          <div class="panel-actions">
+            <span class="mono hint" id="stats-hint">统计自本次启动以来的采样</span>
+            <div class="spacer"></div>
+            <button class="btn subtle" id="reset-stats">清零统计</button>
+          </div>
+        </section>
 
-          <article class="readout" id="readout-gpu-temp">
-            <header>
-              <span class="readout-label">GPU 温度</span>
-              <span class="readout-state" data-role="state">—</span>
-            </header>
-            <div class="readout-value">
-              <span class="num mono" data-role="value">—</span>
-              <span class="unit">°C</span>
-            </div>
-            <div class="readout-note" data-role="note">—</div>
-          </article>
-
-          <article class="readout" id="readout-cpu">
-            <header>
-              <span class="readout-label">CPU 风扇</span>
-              <span class="readout-state" data-role="state">—</span>
-            </header>
-            <div class="readout-value">
-              <span class="num mono" data-role="value">—</span>
-              <span class="unit">RPM</span>
-            </div>
-            <div class="bar"><i data-role="bar"></i></div>
-          </article>
-
-          <article class="readout" id="readout-gpu">
-            <header>
-              <span class="readout-label">GPU 风扇</span>
-              <span class="readout-state" data-role="state">—</span>
-            </header>
-            <div class="readout-value">
-              <span class="num mono" data-role="value">—</span>
-              <span class="unit">RPM</span>
-            </div>
-            <div class="bar"><i data-role="bar"></i></div>
-          </article>
-
-          <article class="readout compact" id="readout-power">
-            <header><span class="readout-label">供电</span></header>
-            <div class="readout-value small">
-              <span class="num mono" data-role="value">—</span>
-            </div>
-            <div class="readout-note" data-role="note">—</div>
-          </article>
-        </div>
-
+        <!-- 功耗墙 -->
         <section class="panel" aria-labelledby="power-heading">
           <div class="panel-head">
             <h2 id="power-heading">默认功耗墙</h2>
             <div class="tabs" id="power-tabs" role="tablist" aria-labelledby="power-heading">
-              <button class="tab" role="tab" data-power-mode="gaming"
-                      aria-controls="sliders" aria-selected="true">游戏</button>
-              <button class="tab" role="tab" data-power-mode="office"
-                      aria-controls="sliders" aria-selected="false">办公</button>
+              <button class="tab" role="tab" data-power-mode="gaming" aria-controls="sliders" aria-selected="true">游戏</button>
+              <button class="tab" role="tab" data-power-mode="office" aria-controls="sliders" aria-selected="false">办公</button>
             </div>
           </div>
 
           <div class="sliders" id="sliders" role="tabpanel" aria-labelledby="power-heading">
             <div class="slider-row">
               <label class="slider-label" for="pl1">PL1<em>长时</em></label>
-              <input type="range" id="pl1" min="5" max="200" step="1"
-                     aria-describedby="pl1-out" />
+              <input type="range" id="pl1" min="5" max="200" step="1" aria-describedby="pl1-out" />
               <output class="mono" id="pl1-out">—</output>
             </div>
             <div class="slider-row">
               <label class="slider-label" for="pl2">PL2<em>短时</em></label>
-              <input type="range" id="pl2" min="5" max="200" step="1"
-                     aria-describedby="pl2-out" />
+              <input type="range" id="pl2" min="5" max="200" step="1" aria-describedby="pl2-out" />
               <output class="mono" id="pl2-out">—</output>
             </div>
             <div class="slider-row">
               <label class="slider-label" for="pl4">PL4<em>峰值</em></label>
-              <input type="range" id="pl4" min="0" max="255" step="1"
-                     aria-describedby="pl4-out" />
+              <input type="range" id="pl4" min="0" max="255" step="1" aria-describedby="pl4-out" />
               <output class="mono" id="pl4-out">—</output>
             </div>
           </div>
+
+          <p class="hint" id="power-source">
+            这是 EC 里的<strong>默认功耗寄存器</strong>（<code>0x730</code>–<code>0x736</code>）。
+            实际生效还受固件 / BIOS 与系统策略约束；「系统当前实际生效值」需要读 MSR（0x610），
+            用户态读不到 —— 见文档「已知限制」。
+          </p>
 
           <div class="panel-actions">
             <span class="pending mono" id="pending">未修改</span>
@@ -171,6 +171,40 @@ pnputil.exe /scan-devices</pre>
           </div>
         </section>
 
+        <!-- 自定义配置 -->
+        <section class="panel" aria-labelledby="profiles-heading">
+          <div class="panel-head">
+            <h2 id="profiles-heading">自定义配置</h2>
+            <span class="panel-meta">功耗墙 + 强冷 存成一组，一键套用</span>
+          </div>
+          <div class="profile-form">
+            <label class="field">
+              <span>配置名</span>
+              <input type="text" id="profile-name" maxlength="32" placeholder="例如：安静办公 / 游戏全开" />
+            </label>
+            <button class="btn" id="save-profile">用当前滑块值保存</button>
+          </div>
+          <ul class="profile-list" id="profile-list">
+            <li class="empty">还没有自定义配置</li>
+          </ul>
+          <p class="hint">保存位置：<code id="profile-path">%LOCALAPPDATA%\Mechrevo-Max\profiles.json</code></p>
+        </section>
+
+        <!-- 寄存器浏览器 -->
+        <section class="panel" aria-labelledby="regs-heading">
+          <div class="panel-head">
+            <h2 id="regs-heading">寄存器浏览器</h2>
+            <span class="panel-meta">只读，用于自查/排障（一次最多 64 个地址）</span>
+          </div>
+          <div class="reg-form">
+            <input type="text" id="reg-addrs" placeholder="0x751 0x730-0x732 0x43E"
+                   aria-label="要读取的地址，空格分隔，支持 0x730-0x735 区间" />
+            <button class="btn" id="read-regs">读取</button>
+            <button class="btn subtle" id="export-regs" disabled>导出 CSV</button>
+          </div>
+          <div class="reg-out mono" id="reg-out" aria-live="polite">—</div>
+        </section>
+
       </section>
     </main>
 
@@ -179,9 +213,10 @@ pnputil.exe /scan-devices</pre>
       <span id="status-msg" role="status" aria-live="polite">就绪</span>
       <span id="persist-error" class="persist-error" role="status" aria-live="polite" hidden></span>
       <div class="spacer"></div>
+      <span class="mono hint" id="log-path">—</span>
       <span class="mono" id="clock">—</span>
     </footer>
-    <!-- 常驻 live 区：role="alert" + hidden 切换时播报不稳定，用它在树里稳定播报 -->
+    <!-- 常驻 live 区：role="alert" + hidden 切换时播报不稳定 -->
     <div id="alert-live" class="sr-only" role="alert" aria-live="assertive"></div>
   </div>
 

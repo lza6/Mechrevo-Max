@@ -45,6 +45,15 @@ pub fn log_dir() -> PathBuf {
         .join("logs")
 }
 
+/// 应用数据目录：`%LOCALAPPDATA%\Mechrevo-Max`（日志、配置都在其下）.
+#[must_use]
+pub fn data_dir() -> PathBuf {
+    log_dir()
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(std::env::temp_dir)
+}
+
 /// 当天的日志文件路径（`app-YYYYMMDD.log`）.
 #[must_use]
 pub fn log_file_for(dir: &Path, at: SystemTime) -> PathBuf {

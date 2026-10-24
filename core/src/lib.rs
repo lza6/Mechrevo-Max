@@ -42,6 +42,7 @@ pub mod ec;
 pub mod error;
 pub mod mode;
 pub mod namespace;
+pub mod profile;
 pub mod sensors;
 
 pub use control::{ChangeRecord, PowerController, PowerLimits};
@@ -50,6 +51,7 @@ pub use ec::{
     RestoreGuard, RollbackPoint, WindowsAcpiTransport,
 };
 pub use error::{Error, Result};
-pub use mode::{ModeChange, ModeController, OperatingMode};
+pub use mode::{FanBoostChange, ModeChange, ModeController, OperatingMode};
 pub use namespace::{AddrStatus, Mode, Reg};
+pub use profile::{MAX_NAME_LEN, Profile};
 pub use sensors::{SensorSnapshot, Sensors};

@@ -7,20 +7,24 @@
 
 use mechrevo_core::ec::{Ec, WindowsAcpiTransport};
 use mechrevo_core::namespace::Mode as PowerMode;
+use mechrevo_core::profile::Profile;
 use mechrevo_core::{
-    ModeChange, ModeController, OperatingMode, PowerController, PowerLimits, Sensors,
+    FanBoostChange, ModeChange, ModeController, OperatingMode, PowerController, PowerLimits,
+    Sensors,
 };
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
 mod logging;
+mod profiles;
 
 /// 最近一次改动，用于一键撤销.
 #[derive(Default)]
 struct UndoStack {
     power: Option<mechrevo_core::ChangeRecord>,
     mode: Option<ModeChange>,
+    fan_boost: Option<FanBoostChange>,
 }
 
 /// 全局应用状态.
@@ -119,8 +123,11 @@ struct StatusPayload {
     mode_raw: Option<(u8, u8)>,
     gaming_power: Option<PowerLimitsDto>,
     office_power: Option<PowerLimitsDto>,
+    /// 强冷（`0x0751` bit6）当前是否开启.
+    fan_boost: Option<bool>,
     can_undo_power: bool,
     can_undo_mode: bool,
+    can_undo_fan_boost: bool,
     /// 上一次失败的原因（成功后清空）.
     last_error: Option<String>,
 }
@@ -193,8 +200,10 @@ fn unavailable_with(
         mode_raw: None,
         gaming_power: None,
         office_power: None,
+        fan_boost: None,
         can_undo_power,
         can_undo_mode,
+        can_undo_fan_boost: false,
         last_error: None,
     }
 }
@@ -212,6 +221,11 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
         }
     };
     let (can_undo_power, can_undo_mode) = undo_flags(state);
+    let can_undo_fan_boost = state
+        .undo
+        .lock()
+        .map(|u| u.fan_boost.is_some())
+        .unwrap_or(false);
 
     let ec = match open_ec() {
         Ok(ec) => ec,
@@ -230,6 +244,7 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
 
     // 档位字段只读一次：`current()` 与 `raw_fields()` 都会读 0x751，
     // 合并后每轮轮询少一次 EC 访问（20 ms 限速下等于少 20 ms 延迟）。
+    let fan_boost = mode_ctl.fan_boost().ok();
     let raw = mode_ctl.raw_fields().ok();
     let mode_key = raw
         .and_then(|(field1, _)| OperatingMode::from_field1(field1))
@@ -254,8 +269,10 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
             .read_defaults(PowerMode::Office)
             .ok()
             .map(PowerLimitsDto::from),
+        fan_boost,
         can_undo_power,
         can_undo_mode,
+        can_undo_fan_boost,
         last_error: last_error(state),
     }
 }
@@ -389,6 +406,144 @@ fn undo_mode_now(state: &AppState) -> Result<String, String> {
     Ok(format!("已还原 {restored} 个寄存器"))
 }
 
+/// 一次寄存器读取的结果（供“寄存器浏览器”使用）.
+#[derive(Serialize, Debug)]
+struct RegReading {
+    addr: u16,
+    value: u8,
+}
+
+/// 寄存器浏览器一次最多读多少地址（防止界面被刷爆、也避免长占 EC）.
+const MAX_REGISTER_QUERY: usize = 64;
+
+/// 开关强冷（同步业务体）.
+fn set_fan_boost_now(state: &AppState, enabled: bool) -> Result<String, String> {
+    let _guard = lock_ec(state).map_err(|(_, message)| message)?;
+    let ec = open_ec().map_err(|e| e.to_string())?;
+    let ctl = ModeController::new(&ec);
+    let change = ctl.set_fan_boost(enabled).map_err(|e| e.to_string())?;
+
+    let mut undo = state
+        .undo
+        .lock()
+        .map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+    undo.fan_boost = Some(change);
+    Ok(if enabled {
+        "强冷已开启".to_owned()
+    } else {
+        "强冷已关闭".to_owned()
+    })
+}
+
+/// 撤销强冷开关（同步业务体）.
+fn undo_fan_boost_now(state: &AppState) -> Result<String, String> {
+    let change = {
+        let undo = state
+            .undo
+            .lock()
+            .map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+        undo.fan_boost.clone()
+    };
+    let Some(change) = change else {
+        return Err("没有可撤销的强冷操作".into());
+    };
+
+    let _guard = lock_ec(state).map_err(|(_, message)| message)?;
+    let ec = open_ec().map_err(|e| e.to_string())?;
+    let restored = change
+        .undo(&ec)
+        .map_err(|e| format!("撤销失败（回滚点已保留，可重试）: {e}"))?;
+
+    let mut undo = state
+        .undo
+        .lock()
+        .map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+    undo.fan_boost = None;
+    Ok(format!("已还原 {restored} 个寄存器"))
+}
+
+/// 只读若干寄存器（同步业务体）.
+fn read_registers_now(state: &AppState, addrs: &[u16]) -> Result<Vec<RegReading>, String> {
+    if addrs.is_empty() {
+        return Err("请先填写要读取的地址".into());
+    }
+    if addrs.len() > MAX_REGISTER_QUERY {
+        return Err(format!("一次最多读取 {MAX_REGISTER_QUERY} 个地址"));
+    }
+    if let Some(bad) = addrs
+        .iter()
+        .copied()
+        .find(|a| *a > mechrevo_core::ec::EC_MAX_ADDR)
+    {
+        return Err(format!(
+            "地址 0x{bad:04X} 超出 EC 范围 0x0000-0x{:04X}",
+            mechrevo_core::ec::EC_MAX_ADDR
+        ));
+    }
+
+    let _guard = lock_ec(state).map_err(|(_, message)| message)?;
+    let ec = open_ec().map_err(|e| e.to_string())?;
+    let mut out = Vec::with_capacity(addrs.len());
+    for &addr in addrs {
+        let value = ec
+            .read(addr)
+            .map_err(|e| format!("读 0x{addr:04X} 失败: {e}"))?;
+        out.push(RegReading { addr, value });
+    }
+    Ok(out)
+}
+
+/// 应用一条自定义配置（同步业务体）：功耗墙 +（可选）强冷.
+///
+/// 自定义配置统一写到 Gaming 默认功耗寄存器（`0x730`-`0x732`）——本机只有这一组
+/// 「默认功耗」可写；如果以后确认了别的模式也有独立寄存器，再扩展。
+fn apply_profile_now(state: &AppState, name: &str) -> Result<String, String> {
+    let dir = logging::data_dir();
+    let list = profiles::load_profiles(&dir);
+    let profile = list
+        .iter()
+        .find(|p| p.name == name)
+        .cloned()
+        .ok_or_else(|| format!("找不到配置「{name}」"))?;
+    profile.validate().map_err(|e| e.to_string())?;
+
+    let limits =
+        PowerLimits::new(profile.pl1, profile.pl2, profile.pl4).map_err(|e| e.to_string())?;
+    let _guard = lock_ec(state).map_err(|(_, message)| message)?;
+    let ec = open_ec().map_err(|e| e.to_string())?;
+
+    // 1) 功耗墙（内部已 snapshot + 逐项校验 + 失败回滚）
+    let power = PowerController::new(&ec);
+    let record = power
+        .apply_defaults(PowerMode::Gaming, &limits)
+        .map_err(|e| format!("写入功耗墙失败: {e}"))?;
+
+    // 2) 可选强冷；失败就把功耗墙也回滚，不留半套状态
+    let fan_change = if profile.fan_boost {
+        match ModeController::new(&ec).set_fan_boost(true) {
+            Ok(change) => Some(change),
+            Err(e) => {
+                let _ = record.undo(&ec);
+                return Err(format!("开启强冷失败，已回滚功耗墙: {e}"));
+            }
+        }
+    } else {
+        None
+    };
+
+    let mut undo = state
+        .undo
+        .lock()
+        .map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+    undo.power = Some(record);
+    undo.fan_boost = fan_change;
+    Ok(format!(
+        "已应用配置「{}」：{}",
+        profile.name,
+        profile.summary()
+    ))
+}
+
 // ============================================================
 // IPC 命令层
 //
@@ -506,6 +661,91 @@ async fn relaunch_elevated() -> Result<(), String> {
         .map_err(join_error)?
 }
 
+/// 开关强冷.
+#[tauri::command]
+async fn set_fan_boost(state: SharedState<'_>, enabled: bool) -> Result<String, String> {
+    let worker = Arc::clone(state.inner());
+    let recorder = Arc::clone(state.inner());
+    let result = tauri::async_runtime::spawn_blocking(move || set_fan_boost_now(&worker, enabled))
+        .await
+        .map_err(join_error)?;
+    note_result(&recorder, &result);
+    result
+}
+
+/// 撤销强冷开关.
+#[tauri::command]
+async fn undo_fan_boost(state: SharedState<'_>) -> Result<String, String> {
+    let worker = Arc::clone(state.inner());
+    let recorder = Arc::clone(state.inner());
+    let result = tauri::async_runtime::spawn_blocking(move || undo_fan_boost_now(&worker))
+        .await
+        .map_err(join_error)?;
+    note_result(&recorder, &result);
+    result
+}
+
+/// 只读若干寄存器（寄存器浏览器）.
+#[tauri::command]
+async fn read_registers(
+    state: SharedState<'_>,
+    addrs: Vec<u16>,
+) -> Result<Vec<RegReading>, String> {
+    let worker = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || read_registers_now(&worker, &addrs))
+        .await
+        .map_err(join_error)?
+}
+
+/// 列出已保存的自定义配置.
+#[tauri::command]
+async fn list_profiles() -> Vec<Profile> {
+    let dir = logging::data_dir();
+    tauri::async_runtime::spawn_blocking(move || profiles::load_profiles(&dir))
+        .await
+        .unwrap_or_default()
+}
+
+/// 保存（或覆盖同名）自定义配置.
+#[tauri::command]
+async fn save_profile(profile: Profile) -> Result<Vec<Profile>, String> {
+    let dir = logging::data_dir();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut list = profiles::load_profiles(&dir);
+        profiles::upsert_profile(&mut list, profile)?;
+        profiles::save_profiles(&dir, &list)?;
+        Ok(list)
+    })
+    .await
+    .map_err(join_error)?
+}
+
+/// 删除自定义配置.
+#[tauri::command]
+async fn delete_profile(name: String) -> Result<Vec<Profile>, String> {
+    let dir = logging::data_dir();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut list = profiles::load_profiles(&dir);
+        profiles::remove_profile(&mut list, &name);
+        profiles::save_profiles(&dir, &list)?;
+        Ok(list)
+    })
+    .await
+    .map_err(join_error)?
+}
+
+/// 应用一条自定义配置.
+#[tauri::command]
+async fn apply_profile(state: SharedState<'_>, name: String) -> Result<String, String> {
+    let worker = Arc::clone(state.inner());
+    let recorder = Arc::clone(state.inner());
+    let result = tauri::async_runtime::spawn_blocking(move || apply_profile_now(&worker, &name))
+        .await
+        .map_err(join_error)?;
+    note_result(&recorder, &result);
+    result
+}
+
 fn main() {
     // 必须在任何可能失败的逻辑之前：release 下没有 stderr，日志是唯一的事后证据
     let log_dir = logging::init();
@@ -530,6 +770,13 @@ fn main() {
             set_power_limits,
             undo_power,
             undo_mode,
+            set_fan_boost,
+            undo_fan_boost,
+            read_registers,
+            list_profiles,
+            save_profile,
+            delete_profile,
+            apply_profile,
             relaunch_elevated
         ])
         .run(tauri::generate_context!())
@@ -718,6 +965,25 @@ mod tests {
 
         note_result(&state, &Ok("已切换到狂暴档".to_owned()));
         assert!(last_error(&state).is_none(), "成功后应清空历史错误");
+    }
+
+    #[test]
+    fn read_registers_rejects_out_of_range_before_touching_hardware() {
+        let state = AppState::default();
+        let err = read_registers_now(&state, &[0x1000]).unwrap_err();
+        assert!(err.contains("超出 EC 范围"), "实际: {err}");
+    }
+
+    #[test]
+    fn read_registers_rejects_empty_and_too_many() {
+        let state = AppState::default();
+        assert!(read_registers_now(&state, &[])
+            .unwrap_err()
+            .contains("请先填写"));
+
+        let too_many: Vec<u16> = (0..=MAX_REGISTER_QUERY as u16).collect();
+        let err = read_registers_now(&state, &too_many).unwrap_err();
+        assert!(err.contains("最多读取"), "实际: {err}");
     }
 
     #[test]

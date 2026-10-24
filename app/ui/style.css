@@ -182,7 +182,7 @@ body::before {
 /* 关键: grid/flex 子项默认 min-width:auto 会阻止收缩导致溢出 */
 .stage > *,
 .stage-main > *,
-.readouts > * { min-width: 0; }
+.panel > * { min-width: 0; }
 
 /* 左栏: 档位 */
 .rail {
@@ -190,6 +190,8 @@ body::before {
   flex-direction: column;
   gap: var(--gap-sm);
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .rail-title {
@@ -255,71 +257,19 @@ body::before {
 
 /* 右侧 */
 .stage-main {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  /* v0.3.0：右栏从 2 个面板变成 4 个（传感器/功耗墙/自定义配置/寄存器浏览器），
+     固定两行的 grid 会把它裁掉 —— 改成竖排 + 整栏滚动，让面板保持自然高度。 */
+  display: flex;
+  flex-direction: column;
   gap: var(--gap);
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
 }
 
 /* 读数区 —— flex 换行, 结构上不可能溢出 */
-/* 读数区 —— 用 minmax(0, 1fr) 网格: 每列都允许收缩到 0,
-   规范保证它不会超出容器宽度 (flex 的 min-width:auto 容易阴魂不散). */
-.readouts {
-  display: grid;
-  /* 卡片数量会增长（温度是后加的）；用 auto-fit 避免固定 3 列把新卡片挤到裁切区 */
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  align-content: start;
-  gap: var(--gap-sm);
-  min-width: 0;
-  overflow: hidden;
-}
-
-.readout {
-  padding: 14px var(--gap);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--line-soft);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-xs);
-  min-width: 0;
-  overflow: hidden;
-}
-
-.readout header { display: flex; align-items: center; justify-content: space-between; }
-.readout-label { font-size: 12px; color: var(--text-dim); letter-spacing: 0.5px; }
-.readout-state { font-size: 11px; color: var(--text-faint); }
-
-.readout-value { display: flex; align-items: baseline; gap: 5px; }
-.readout-value .num {
-  font-size: clamp(24px, 2.6vw, 34px);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
-  transition: color var(--dur) var(--ease);
-}
-.readout-value.small .num { font-size: 20px; }
-.unit { font-size: 11px; color: var(--text-faint); letter-spacing: 0.5px; }
-
-.bar {
-  height: 3px;
-  border-radius: 2px;
-  background: oklch(14% 0.01 278);
-  overflow: hidden;
-}
-.bar > i {
-  display: block;
-  height: 100%;
-  width: 0%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-hi));
-  transition: width 600ms var(--ease), background var(--dur) var(--ease);
-}
-
-.readout.is-hot .num { color: var(--warn); }
-.readout.is-hot .bar > i { background: linear-gradient(90deg, var(--warn), oklch(85% 0.14 60)); }
-
-.readout-note { font-size: 11px; color: var(--text-faint); }
+/* 传感器表样式见文件末尾「传感器表」段（v0.3.0 把读数卡换成了表格） */
 
 /* 功耗面板 */
 .panel {
@@ -330,8 +280,10 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
+  /* 面板本身不再内部滚动（那样会裁内容），高度由内容决定，滚动交给 .stage-main */
+  flex: 0 0 auto;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
 }
 
 .panel-head { display: flex; align-items: center; justify-content: space-between; }
@@ -569,8 +521,150 @@ input[type="range"]:focus-visible {
   white-space: nowrap;
 }
 
-/* 温度卡状态：偏高用警告色，过热用危险色（与风扇卡的 is-hot 区分开） */
-.readout.is-warm .readout-state { color: var(--warn); }
-.readout.is-hot { border-color: oklch(65% 0.19 26 / .45); }
-.readout.is-hot .readout-state { color: var(--danger); }
-.readout.is-hot .num { color: var(--danger); }
+
+
+/* ---------- 传感器表（v0.3.0，HWiNFO 风格：当前/最小/平均/最大） ---------- */
+
+.sensors {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.sensors thead th {
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.sensors thead th:first-child { text-align: left; }
+.sensors tbody th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-dim);
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.sensors tbody td {
+  text-align: right;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-dim);
+  font-family: var(--mono);
+}
+.sensors tbody td.v { color: var(--text); font-size: 15px; font-weight: 600; }
+.sensors tbody td:last-child { font-family: var(--font); font-size: 12px; }
+.sensors tbody tr[data-level="warm"] td.v,
+.sensors tbody tr[data-level="warm"] td:last-child { color: var(--warn); }
+.sensors tbody tr[data-level="hot"] td.v,
+.sensors tbody tr[data-level="hot"] td:last-child { color: var(--danger); }
+
+.panel-meta { font-size: 11px; color: var(--text-faint); }
+.hint { font-size: 11.5px; color: var(--text-faint); line-height: 1.6; margin: 8px 0 0; }
+.hint code { font-family: var(--mono); background: var(--surface-3); padding: 1px 4px; border-radius: 3px; }
+
+/* ---------- 位域解释 ---------- */
+
+.bitfield {
+  margin-top: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--line);
+  background: oklch(17% 0.012 278);
+}
+.bitfield-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.bitfield-head .mono { font-size: 12px; color: var(--text); }
+.bitfield-note { font-size: 10px; color: var(--text-faint); }
+.bitfield-rows { margin: 8px 0 0; display: grid; gap: 4px; }
+.bitfield-rows > div { display: flex; justify-content: space-between; font-size: 11.5px; }
+.bitfield-rows dt { color: var(--text-faint); }
+.bitfield-rows dd { margin: 0; font-family: var(--mono); color: var(--text-dim); }
+
+/* ---------- 开关 ---------- */
+
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch-track {
+  position: relative;
+  width: 38px; height: 20px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  flex: none;
+}
+.switch-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text-faint);
+  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.switch input:checked + .switch-track { background: var(--accent-dim); border-color: var(--accent); }
+.switch input:checked + .switch-track .switch-thumb { transform: translateX(18px); background: var(--accent-hi); }
+.switch input:focus-visible + .switch-track { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+.switch input:disabled + .switch-track { opacity: 0.45; }
+.switch-label { font-size: 12.5px; color: var(--text-dim); display: flex; flex-direction: column; }
+.switch-label em { font-style: normal; font-size: 10px; color: var(--text-faint); font-family: var(--mono); }
+
+.row-actions { display: flex; gap: var(--gap-xs); margin-top: 10px; }
+
+/* ---------- 自定义配置 ---------- */
+
+.profile-form { display: flex; gap: var(--gap-sm); align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.field > span { font-size: 11px; color: var(--text-faint); }
+.field input {
+  background: oklch(16% 0.012 278);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+}
+.field input:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 1px; }
+
+.profile-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.profile-list .empty { font-size: 12px; color: var(--text-faint); padding: 6px 0; }
+.profile-item {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--gap);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-soft);
+  background: var(--surface-1);
+}
+.profile-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.profile-info strong { font-size: 13px; font-weight: 600; }
+.profile-info .mono { font-size: 11px; color: var(--text-faint); }
+.profile-actions { display: flex; gap: 6px; flex: none; }
+
+/* ---------- 寄存器浏览器 ---------- */
+
+.reg-form { display: flex; gap: var(--gap-sm); }
+.reg-form input {
+  flex: 1;
+  background: oklch(16% 0.012 278);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.reg-form input:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 1px; }
+.reg-out {
+  margin-top: 10px;
+  max-height: 132px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: oklch(14% 0.01 278);
+  border: 1px solid var(--line-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: pre;
+}

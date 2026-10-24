@@ -46,6 +46,13 @@ const BACKEND_COMMANDS: &[(&str, &[&str])] = &[
     ("set_power_limits", &["mode", "pl1", "pl2", "pl4"]),
     ("undo_power", &[]),
     ("undo_mode", &[]),
+    ("set_fan_boost", &["enabled"]),
+    ("undo_fan_boost", &[]),
+    ("read_registers", &["addrs"]),
+    ("list_profiles", &[]),
+    ("save_profile", &["profile"]),
+    ("delete_profile", &["name"]),
+    ("apply_profile", &["name"]),
     ("relaunch_elevated", &[]),
 ];
 
@@ -59,6 +66,13 @@ const FRONTEND_CONTRACT: &[(&str, &[&str])] = &[
     ("set_power_limits", &["mode", "pl1", "pl2", "pl4"]),
     ("undo_power", &[]),
     ("undo_mode", &[]),
+    ("set_fan_boost", &["enabled"]),
+    ("undo_fan_boost", &[]),
+    ("read_registers", &["addrs"]),
+    ("list_profiles", &[]),
+    ("save_profile", &["profile"]),
+    ("delete_profile", &["name"]),
+    ("apply_profile", &["name"]),
     ("relaunch_elevated", &[]),
 ];
 

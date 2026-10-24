@@ -47,7 +47,7 @@
 | 项 | 状态 | 证据 | 最后改动 |
 |---|---|---|---|
 | IPC 契约测试（8 个） | ✅ 已验证 | `cargo test --test ipc_contract` → `8 passed` | 2026-10-24 |
-| IPC 命令层单测（25 个） | ✅ 已验证 | `cargo test --bin mechrevo-max` → `25 passed`（+5 sysinfo：内存合理性、GPU 结构、慢查询解析、CPU 使用率区间、坏 JSON 不 panic） | 2026-10-25 |
+| IPC 命令层单测（26 个） | ✅ 已验证 | `cargo test --bin mechrevo-max` → `26 passed`（+5 sysinfo：内存合理性、GPU 结构、慢查询解析、CPU 使用率区间、坏 JSON 不 panic） | 2026-10-25 |
 | 免驱系统数据采集 | ✅ 已验证 | 真机实测：GPU `nvidia-smi` 4%/40°C/5.91W/1288MiB；SSD 41°C/上限83/磨损0；电池 46.74Wh/11.986V/接电；内存 39.7GB/55% | 2026-10-25 |
 | 日志落盘与轮转 | ✅ 已验证 | `logging::tests`：写入含级别与内容、只删 `app-*.log` 且不碰其它文件、新文件保留 | 2026-10-24 |
 | 失败原因常驻 | ✅ 已验证 | `note_result` 失败记录/成功清空；`unavailable` 载荷不携带陈旧错误；前端常驻错误条 2 条断言 | 2026-10-24 |
@@ -63,6 +63,7 @@
 | 界面渲染（浏览器替代验证） | ✅ 已验证 | `docs/screenshots/ui-ready.png`、`ui-ec-unavailable.png`、`ui-need-admin.png`；规格见 `docs/qa/ui-smoke-spec.md` | 2026-10-24 |
 | 命令执行线程 | ✅ 静态确认 + 合理推断 | 6 个命令改 `async fn` + `spawn_blocking`（默认 `ExecutionContext::Blocking` 会占 WebView2 UI 线程，官方 doc 有原文）；`cargo check --all-targets` 通过 | 2026-10-24 |
 | 覆盖率基线 | ✅ 已验证 | `cargo llvm-cov 0.9.1`：`core` 行覆盖 **86.56%**（排除 `ec/windows.rs` 后 97.1%）；Branches 列在 MSVC 下不可用 | 2026-10-24 |
+| CI（v0.5.0 代码提交） | ✅ 已验证 | run 9635b1e → `success`（三 job）；**前两次红是我的测试依赖真机硬件事实**（CI 虚拟机无真电池、磁盘 FriendlyName 可能为空）→ 改为 fixture 测解析 + 真机 smoke | 2026-10-25 |
 | CI（v0.3.0 代码提交） | ✅ 已验证 | run [40108390439](https://github.com/lza6/Mechrevo-Max/actions/runs/40108390439) → `success`，三 job 全 success（含 package 产出 msi/nsis） | 2026-10-24 |
 | CI（v0.2.0 代码提交） | ✅ 已验证 | run [40105677271](https://github.com/lza6/Mechrevo-Max/actions/runs/40105677271) → `success`，三个 job 全 success（含 package 真实产出 msi/nsis） | 2026-10-24 |
 | Release v0.2.0 | ✅ 已验证 | API 复核 `draft=false`，三资产：exe 5 130 240 B、msi 1 990 656 B、nsis 1 364 018 B；`latest=v0.2.0` | 2026-10-24 |

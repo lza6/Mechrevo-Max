@@ -27,5 +27,10 @@
 验证本身不应改动工作区；若跑了 `cargo build`，回滚 = 无需处理（`target/` 已 ignore）。
 
 ## 常见坑
+- **测试不要断言"某台机器的具体硬件事实"**（2026-10-25 连红两次的教训）：CI 是虚拟机，
+  可能没有真电池（`BatteryStatus` 类存在但容量为 0）、`Get-PhysicalDisk` 的 FriendlyName 可能为空。
+  解析逻辑用**固定 JSON fixture** 测；真机只做"跑得通、不 panic"的 smoke。
+- 只读系统信息（CPU/GPU/电池/SSD）全部免驱、不经 EC，改这层不需要动 EC 限速逻辑，但要注意别在轮询里拉起进程（缓存 ≥3s/60s）。
+
 - `cargo test --test ipc_contract` **不编译** `main.rs`；必须另跑 `cargo check --all-targets` 或 `cargo test --bin mechrevo-max`
 - clippy 输出被缓存时会只打印 `Finished`；以"是否有 `warning:` 行"判定，不要以耗时判定

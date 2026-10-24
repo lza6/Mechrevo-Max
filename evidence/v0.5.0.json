@@ -56,5 +56,34 @@
     "电池设计容量/循环次数/温度：本机 WMI 不暴露，界面如实标『本机不提供』",
     "风扇曲线写入未实现",
     "GPU 数据依赖 nvidia-smi（无 N 卡时该部分为 —）"
-  ]
+  ],
+  "release": {
+    "tag": "v0.5.0",
+    "url": "https://github.com/lza6/Mechrevo-Max/releases/tag/v0.5.0",
+    "assets": [
+      "mechrevo-max.exe 5 389 824 B",
+      "Mechrevo-Max_0.5.0_x64_en-US.msi 2 093 056 B",
+      "Mechrevo-Max_0.5.0_x64-setup.exe 1 439 809 B"
+    ]
+  },
+  "ci_lesson": {
+    "runs": [
+      {
+        "sha": "e673d31",
+        "conclusion": "failure",
+        "cause": "slow_query_parses_battery_and_disk 断言『磁盘型号非空/CPU 型号非空』—— CI 虚拟机上 Get-PhysicalDisk 的 FriendlyName 可能为空"
+      },
+      {
+        "sha": "b9c3f4a",
+        "conclusion": "failure",
+        "cause": "改成『电池存在则容量非 0』仍失败 —— VM 上 BatteryStatus 类存在但容量为 0"
+      },
+      {
+        "sha": "9635b1e",
+        "conclusion": "success",
+        "cause": "最终修法：解析逻辑用**固定 JSON fixture** 测；真机只做『跑得通不 panic』的 smoke"
+      }
+    ],
+    "takeaway": "这两次红都是**我的测试写错了**，不是产品问题。CI 的价值正在于此：它把『依赖某台机器具体硬件事实的测试』当场戳穿。以后凡碰系统信息/WMI 的解析，一律 fixture 测 + 真机 smoke。"
+  }
 }

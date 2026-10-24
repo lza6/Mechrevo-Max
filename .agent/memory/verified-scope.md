@@ -13,6 +13,8 @@
 | 类型检查（含 main.rs） | `cargo check --all-targets` | 通过 | 2026-10-24 |
 | release 构建 | `cargo build --release` | exe 5 091 840 B，sha256 `1b279b85…59c7b` | 2026-10-24 |
 | 覆盖率基线 | `cargo llvm-cov`（core） | 行覆盖 86.56%，排除 windows.rs 后 97.1% | 2026-10-24 |
-| 独立复审 | reviewer 子代理 | CONDITIONAL PASS → R1/R2/R3/R4 已全部修复并复验 | 2026-10-24 |
+| 独立复审（第 1 轮） | reviewer 子代理 | CONDITIONAL PASS → R1/R2/R3/R4 已全部修复（第 2 轮复验结果待回） | 2026-10-24 |
+| CI（含代码改动） | run 40100014152 | success，全部步骤成功 | 2026-10-24 |
+| Release v0.1.3 | GitHub API | draft=false，asset 5 091 840 B 与本地一致 | 2026-10-24 |
 
 **未验证**：真机硬件测试（`--ignored`，按安全策略不做）、GUI 运行时路径、覆盖率、跨机型。

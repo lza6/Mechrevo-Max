@@ -9,14 +9,46 @@
     "PL1/PL2 没显示系统当前值；黑匣子太多；参考 HWiNFO64 的专业度"
   ],
   "commands_executed": [
-    { "cmd": "cd core && cargo test --offline", "exit_code": 0, "raw_output_tail": "test result: ok. 60 passed; 0 failed; 0 ignored\n(含 +5 强冷位测试、+2 丢写重试测试、+4 Profile 校验)\ntest result: 0 passed; 0 failed; 8 ignored (hardware)" },
-    { "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max", "exit_code": 0, "raw_output_tail": "test result: ok. 20 passed; 0 failed（+6 配置持久化、+2 寄存器边界）" },
-    { "cmd": "cd app/src-tauri && cargo test --offline --test ipc_contract", "exit_code": 0, "raw_output_tail": "test result: ok. 8 passed; 0 failed（命令集扩到 13 个，源码解析双向比对通过）" },
-    { "cmd": "两个 crate 的 cargo clippy --offline --all-targets 与 cargo fmt --check", "exit_code": 0, "raw_output_tail": "clippy 0 warning（两个包）；fmt 均 exit 0" },
-    { "cmd": "真机：cargo test --test hardware fan_boost_roundtrip -- --ignored（连跑 3 次）", "exit_code": 0, "raw_output_tail": "当前强冷 = true (751=0x40, 7AB=0x00)\n翻转后强冷 = false (751=0x00)\n回滚 1 个寄存器\n最终 751=0x40, 7AB=0x00\ntest result: ok. 1 passed（3/3 次通过）" },
-    { "cmd": "Playwright 前端断言（新界面 43 条）", "exit_code": 0, "raw_output_tail": "43 条中 42 条首次通过；唯一失败是我的断言算错（0x1-0x40 正好 64 个=上限，本就该允许）。定点复测：0x1-0x40 允许、0x1-0x41 拒绝、0x1000 拒绝、0xZZ 拒绝，且后三者都不发 IPC" },
-    { "cmd": "真实 GUI：启动 release exe → 置前 → 截图 → 停进程 → 读回 0x751", "exit_code": 0, "raw_output_tail": "界面实录：EC 已连接 / 项目 ID 16 / 采样 间隔2.0s·实测2.0s·5次 / CPU 43°C(43/44/46 正常) / GPU 37°C(37/37/37 正常) / CPU 风扇 5431RPM(5431/5445/5458 高转速) / GPU 风扇 4994RPM / 供电 适配器 / 均衡高亮 / 751=0x40·7AB=0x00 / 档位编码 0x00→均衡 / bit6 强冷 开(0x40) / PL 75·75·200；内存 47.4 MB\n停止后读回 0x751=0x40（强冷仍开，未被误改）" },
-    { "cmd": "cd app/src-tauri && cargo build --release", "exit_code": 0, "raw_output_tail": "Compiling mechrevo-max v0.3.0 … Finished in 59.31s\nsha256 c4c077374431d68a4577deee7464cb03b4dc2608beaad7100b70e757bb0dfdc2  5297152 bytes" }
+    {
+      "cmd": "cd core && cargo test --offline",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 60 passed; 0 failed; 0 ignored\n(含 +5 强冷位测试、+2 丢写重试测试、+4 Profile 校验)\ntest result: 0 passed; 0 failed; 8 ignored (hardware)"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 20 passed; 0 failed（+6 配置持久化、+2 寄存器边界）"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --test ipc_contract",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 8 passed; 0 failed（命令集扩到 13 个，源码解析双向比对通过）"
+    },
+    {
+      "cmd": "两个 crate 的 cargo clippy --offline --all-targets 与 cargo fmt --check",
+      "exit_code": 0,
+      "raw_output_tail": "clippy 0 warning（两个包）；fmt 均 exit 0"
+    },
+    {
+      "cmd": "真机：cargo test --test hardware fan_boost_roundtrip -- --ignored（连跑 3 次）",
+      "exit_code": 0,
+      "raw_output_tail": "当前强冷 = true (751=0x40, 7AB=0x00)\n翻转后强冷 = false (751=0x00)\n回滚 1 个寄存器\n最终 751=0x40, 7AB=0x00\ntest result: ok. 1 passed（3/3 次通过）"
+    },
+    {
+      "cmd": "Playwright 前端断言（新界面 43 条）",
+      "exit_code": 0,
+      "raw_output_tail": "43 条中 42 条首次通过；唯一失败是我的断言算错（0x1-0x40 正好 64 个=上限，本就该允许）。定点复测：0x1-0x40 允许、0x1-0x41 拒绝、0x1000 拒绝、0xZZ 拒绝，且后三者都不发 IPC"
+    },
+    {
+      "cmd": "真实 GUI：启动 release exe → 置前 → 截图 → 停进程 → 读回 0x751",
+      "exit_code": 0,
+      "raw_output_tail": "界面实录：EC 已连接 / 项目 ID 16 / 采样 间隔2.0s·实测2.0s·5次 / CPU 43°C(43/44/46 正常) / GPU 37°C(37/37/37 正常) / CPU 风扇 5431RPM(5431/5445/5458 高转速) / GPU 风扇 4994RPM / 供电 适配器 / 均衡高亮 / 751=0x40·7AB=0x00 / 档位编码 0x00→均衡 / bit6 强冷 开(0x40) / PL 75·75·200；内存 47.4 MB\n停止后读回 0x751=0x40（强冷仍开，未被误改）"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo build --release",
+      "exit_code": 0,
+      "raw_output_tail": "Compiling mechrevo-max v0.3.0 … Finished in 59.31s\nsha256 c4c077374431d68a4577deee7464cb03b4dc2608beaad7100b70e757bb0dfdc2  5297152 bytes"
+    }
   ],
   "critical_hardware_finding": {
     "observation": "真机首次跑 fan_boost 往返测试时，回滚写入被 EC 丢弃一次：VerifyMismatch { addr: 0x751, expected: 0x40, actual: 0x00 }（4 次尝试中出现 1 次）",
@@ -25,23 +57,91 @@
     "state_after": "测试与 E2E 结束后读回 0x751=0x40，机器强冷状态与开工前一致"
   },
   "new_features": {
-    "fan_boost": { "register": "0x751 bit6", "semantics": "读改写，只动 bit6，写后读回校验，失败回滚，可单独撤销；解析档位时 &0xBF 屏蔽", "verified_on_hardware": true },
-    "profiles": { "storage": "%LOCALAPPDATA%\\Mechrevo-Max\\profiles.json", "limit": 32, "semantics": "同名覆盖；坏 JSON 改名 .broken 保留现场并降级为空；应用时强冷失败会把功耗墙一起回滚", "verified": "6 个单测" },
-    "register_browser": { "range": "0x0000-0x0FFF，单次 ≤64 个地址", "semantics": "前端与后端都前置校验；非法输入不发 IPC；结果可导出 CSV", "verified": "2 个 Rust 边界单测 + 4 个浏览器边界用例" },
-    "sensor_table": { "columns": "当前 / 最小 / 平均 / 最大 / 状态", "stats": "自本次启动累计，可清零", "verified": "浏览器断言" },
-    "sample_info": { "topbar": "间隔 2.0s · 实测 x.xs · N 次", "panel": "本次启动已采样 N 次 · 上次 x 秒前" },
-    "bitfield_explainer": { "shows": "751 原始值、档位编码(屏蔽 bit6 后)→档位名、bit6 强冷 开/关", "note_shown": "档位由机器固件/EC 决定，本程序仅读取；启动时不会写入" }
+    "fan_boost": {
+      "register": "0x751 bit6",
+      "semantics": "读改写，只动 bit6，写后读回校验，失败回滚，可单独撤销；解析档位时 &0xBF 屏蔽",
+      "verified_on_hardware": true
+    },
+    "profiles": {
+      "storage": "%LOCALAPPDATA%\\Mechrevo-Max\\profiles.json",
+      "limit": 32,
+      "semantics": "同名覆盖；坏 JSON 改名 .broken 保留现场并降级为空；应用时强冷失败会把功耗墙一起回滚",
+      "verified": "6 个单测"
+    },
+    "register_browser": {
+      "range": "0x0000-0x0FFF，单次 ≤64 个地址",
+      "semantics": "前端与后端都前置校验；非法输入不发 IPC；结果可导出 CSV",
+      "verified": "2 个 Rust 边界单测 + 4 个浏览器边界用例"
+    },
+    "sensor_table": {
+      "columns": "当前 / 最小 / 平均 / 最大 / 状态",
+      "stats": "自本次启动累计，可清零",
+      "verified": "浏览器断言"
+    },
+    "sample_info": {
+      "topbar": "间隔 2.0s · 实测 x.xs · N 次",
+      "panel": "本次启动已采样 N 次 · 上次 x 秒前"
+    },
+    "bitfield_explainer": {
+      "shows": "751 原始值、档位编码(屏蔽 bit6 后)→档位名、bit6 强冷 开/关",
+      "note_shown": "档位由机器固件/EC 决定，本程序仅读取；启动时不会写入"
+    }
   },
   "tests": [
-    { "name": "core 单测 + doctest", "type": "unit", "status": "passed", "evidence": "60 + 1" },
-    { "name": "IPC 命令层单测", "type": "unit", "status": "passed", "evidence": "20" },
-    { "name": "IPC 契约", "type": "integration", "status": "passed", "evidence": "8（13 命令双向比对）" },
-    { "name": "前端浏览器断言", "type": "e2e", "status": "passed", "evidence": "43 条（1 条为断言算错，已定点复测修正）" },
-    { "name": "真机强冷往返（含回滚）", "type": "integration", "status": "passed", "evidence": "fan_boost_roundtrip 3/3 通过；结束后 0x751=0x40 与开工一致" },
-    { "name": "真实 GUI 端到端", "type": "e2e", "status": "passed", "evidence": "docs/screenshots/app-live-window.png；内存 47.4 MB" },
-    { "name": "clippy / fmt", "type": "lint", "status": "passed", "evidence": "两 crate 0 warning / exit 0" },
-    { "name": "安装包在干净机实装", "type": "manual", "status": "blocked", "evidence": "用户已明确暂不处理" },
-    { "name": "读屏实际播报", "type": "manual", "status": "blocked", "evidence": "用户已明确暂不处理" }
+    {
+      "name": "core 单测 + doctest",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "60 + 1"
+    },
+    {
+      "name": "IPC 命令层单测",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "20"
+    },
+    {
+      "name": "IPC 契约",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "8（13 命令双向比对）"
+    },
+    {
+      "name": "前端浏览器断言",
+      "type": "e2e",
+      "status": "passed",
+      "evidence": "43 条（1 条为断言算错，已定点复测修正）"
+    },
+    {
+      "name": "真机强冷往返（含回滚）",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "fan_boost_roundtrip 3/3 通过；结束后 0x751=0x40 与开工一致"
+    },
+    {
+      "name": "真实 GUI 端到端",
+      "type": "e2e",
+      "status": "passed",
+      "evidence": "docs/screenshots/app-live-window.png；内存 47.4 MB"
+    },
+    {
+      "name": "clippy / fmt",
+      "type": "lint",
+      "status": "passed",
+      "evidence": "两 crate 0 warning / exit 0"
+    },
+    {
+      "name": "安装包在干净机实装",
+      "type": "manual",
+      "status": "blocked",
+      "evidence": "用户已明确暂不处理"
+    },
+    {
+      "name": "读屏实际播报",
+      "type": "manual",
+      "status": "blocked",
+      "evidence": "用户已明确暂不处理"
+    }
   ],
   "files_changed": [
     "core/src/mode.rs（强冷位读改写 + 有界重试 + 5 单测）",
@@ -55,12 +155,33 @@
     "app/ui/index.html / app.js / style.css（界面重做：传感器表、位域解释、强冷开关、配置、寄存器浏览器、采样信息）",
     "版本三处 → 0.3.0；CHANGELOG 0.3.0 段"
   ],
-  "artifact": { "path": "app/src-tauri/target/release/mechrevo-max.exe", "size_bytes": 5297152, "sha256": "c4c077374431d68a4577deee7464cb03b4dc2608beaad7100b70e757bb0dfdc2" },
+  "artifact": {
+    "path": "app/src-tauri/target/release/mechrevo-max.exe",
+    "size_bytes": 5297152,
+    "sha256": "c4c077374431d68a4577deee7464cb03b4dc2608beaad7100b70e757bb0dfdc2"
+  },
   "limitations": [
     "「系统实际生效的 PL1/PL2」仍看不到：需读 Intel MSR 0x610（RAPL），用户态无权；HWiNFO 靠自带内核驱动，本项目不分发驱动",
     "风扇 PWM 百分比未展示：0x075B/0x075C 已知是占空比，但原始字节→百分比换算未在本机标定",
     "配置应用统一写 Gaming 默认功耗寄存器（0x730-0x732）；其他模式是否有独立寄存器未确认",
     "真机写入只验证了强冷位；切档与功耗墙写入的行为级验证仍是 pending",
     "UI 右栏在 975x691 窗口下需滚动才能看到「自定义配置 / 寄存器浏览器」"
-  ]
+  ],
+  "release": {
+    "tag": "v0.3.0",
+    "url": "https://github.com/lza6/Mechrevo-Max/releases/tag/v0.3.0",
+    "verified_at": "2026-10-24T23:49:55+08:00",
+    "assets": "exe 5 297 152 B + msi + nsis（由 CI package job 产出并上传）"
+  },
+  "ci": {
+    "run_id": 40108390439,
+    "head_sha": "1e80524",
+    "conclusion": "success",
+    "jobs": [
+      "build · test · lint → success",
+      "coverage（core）→ success",
+      "打包冒烟（msi/nsis）→ success"
+    ],
+    "verified_at": "2026-10-24T23:49:55+08:00"
+  }
 }

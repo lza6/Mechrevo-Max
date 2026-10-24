@@ -62,6 +62,7 @@
 | 界面渲染（浏览器替代验证） | ✅ 已验证 | `docs/screenshots/ui-ready.png`、`ui-ec-unavailable.png`、`ui-need-admin.png`；规格见 `docs/qa/ui-smoke-spec.md` | 2026-10-24 |
 | 命令执行线程 | ✅ 静态确认 + 合理推断 | 6 个命令改 `async fn` + `spawn_blocking`（默认 `ExecutionContext::Blocking` 会占 WebView2 UI 线程，官方 doc 有原文）；`cargo check --all-targets` 通过 | 2026-10-24 |
 | 覆盖率基线 | ✅ 已验证 | `cargo llvm-cov 0.9.1`：`core` 行覆盖 **86.56%**（排除 `ec/windows.rs` 后 97.1%）；Branches 列在 MSVC 下不可用 | 2026-10-24 |
+| CI（v0.3.0 代码提交） | ✅ 已验证 | run [40108390439](https://github.com/lza6/Mechrevo-Max/actions/runs/40108390439) → `success`，三 job 全 success（含 package 产出 msi/nsis） | 2026-10-24 |
 | CI（v0.2.0 代码提交） | ✅ 已验证 | run [40105677271](https://github.com/lza6/Mechrevo-Max/actions/runs/40105677271) → `success`，三个 job 全 success（含 package 真实产出 msi/nsis） | 2026-10-24 |
 | Release v0.2.0 | ✅ 已验证 | API 复核 `draft=false`，三资产：exe 5 130 240 B、msi 1 990 656 B、nsis 1 364 018 B；`latest=v0.2.0` | 2026-10-24 |
 | CI（GitHub Actions） | ✅ 已验证 | **含代码改动的 v0.1.3 提交 `3eae971`**：run [40100014152](https://github.com/lza6/Mechrevo-Max/actions/runs/40100014152) → `success`，全部步骤 success；另 run [40098051184](https://github.com/lza6/Mechrevo-Max/actions/runs/40098051184) → `success`（约 240s）。步骤：core fmt/clippy(-D warnings)/test、app fmt/clippy/bin 单测/契约、node --check、合规自检。**不跑**真机测试与 GUI E2E | 2026-10-24 |

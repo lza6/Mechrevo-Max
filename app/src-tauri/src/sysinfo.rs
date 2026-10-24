@@ -482,17 +482,30 @@ mod tests {
         }
     }
 
+    /// 只断言**环境无关的不变量**。
+    ///
+    /// 教训（2026-10-25，CI 上翻车）：这里原本断言"磁盘型号非空、CPU 型号非空"，
+    /// 结果在 GitHub 的 Windows 虚拟机上 `Get-PhysicalDisk` 的 FriendlyName 可能是空串，
+    /// 测试直接红 —— 而产品本身没有问题。**测试不该依赖某台机器的具体硬件事实**，
+    /// 只该依赖"解析出来的结构是否自洽"。
     #[test]
-    fn slow_query_parses_battery_and_disk() {
+    fn slow_query_produces_structurally_valid_data() {
         let data = query_slow();
         if let Some(b) = &data.battery {
-            assert!(b.full_mwh > 0 || b.remaining_mwh > 0, "电池容量应有值");
+            assert!(
+                b.full_mwh > 0 || b.remaining_mwh > 0,
+                "电池存在时容量字段不应全为 0"
+            );
+            assert!(b.voltage_mv < 30_000, "电压不合理: {} mV", b.voltage_mv);
         }
         if let Some(d) = &data.disk {
-            assert!(!d.model.is_empty(), "磁盘型号不应为空");
+            assert!(d.size_gb > 0, "磁盘存在时容量应 > 0");
+            if let Some(t) = d.temp_c {
+                assert!(t < 120, "磁盘温度不合理: {t}");
+            }
         }
         if let Some(dev) = &data.device {
-            assert!(!dev.cpu.is_empty(), "CPU 型号不应为空");
+            assert!(dev.cpu_threads > 0, "逻辑处理器数应 > 0");
         }
     }
 

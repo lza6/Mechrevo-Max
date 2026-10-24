@@ -52,8 +52,22 @@
     }
   ],
   "temperature_findings": {
-    "cpu": { "addr": "0x043E", "reference": "ACPI 热区 \\_sb.ectz（Get-Counter）", "samples": 9, "pearson_r": 0.857, "offset_c": "+2", "status": "Verified" },
-    "gpu": { "addr": "0x044F", "reference": "nvidia-smi --query-gpu=temperature.gpu", "samples": 80, "pearson_r": 0.989, "offset_c": "+1", "status": "Verified" }
+    "cpu": {
+      "addr": "0x043E",
+      "reference": "ACPI 热区 \\_sb.ectz（Get-Counter）",
+      "samples": 9,
+      "pearson_r": 0.857,
+      "offset_c": "+2",
+      "status": "Verified"
+    },
+    "gpu": {
+      "addr": "0x044F",
+      "reference": "nvidia-smi --query-gpu=temperature.gpu",
+      "samples": 80,
+      "pearson_r": 0.989,
+      "offset_c": "+1",
+      "status": "Verified"
+    }
   },
   "engineer_findings": [
     "ACPI 温度轮询（WMI MSAcpi_ThermalZoneTemperature 与 Get-Counter 皆然）会与直连 EC 抢同一条通道：单次读取从 ~20 ms 恶化到 ~1.5 s（慢 75 倍）。因此参照必须分阶段读，不能并发。",
@@ -70,30 +84,128 @@
     "版本三处 → 0.2.0；CHANGELOG 0.2.0 段"
   ],
   "tests": [
-    { "name": "core 单测 + doctest", "type": "unit", "status": "passed", "evidence": "49 + 1 passed" },
-    { "name": "IPC 命令层单测", "type": "unit", "status": "passed", "evidence": "12 passed" },
-    { "name": "IPC 契约", "type": "integration", "status": "passed", "evidence": "8 passed" },
-    { "name": "前端浏览器断言", "type": "e2e", "status": "passed", "evidence": "38/38，0 error" },
-    { "name": "真实 GUI 端到端（启动→EC→UI→截图→停止）", "type": "e2e", "status": "passed", "evidence": "docs/screenshots/app-live-window.png；内存 62.6 MB；温度 72/43 °C 与参照吻合" },
-    { "name": "温度 vs ACPI 热区", "type": "integration", "status": "passed", "evidence": "9 组配对，r=+0.857" },
-    { "name": "温度 vs nvidia-smi", "type": "integration", "status": "passed", "evidence": "80 组并发，r=+0.989" },
-    { "name": "clippy / fmt（两 crate）", "type": "lint", "status": "passed", "evidence": "0 warning / exit 0" }
+    {
+      "name": "core 单测 + doctest",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "49 + 1 passed"
+    },
+    {
+      "name": "IPC 命令层单测",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "12 passed"
+    },
+    {
+      "name": "IPC 契约",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "8 passed"
+    },
+    {
+      "name": "前端浏览器断言",
+      "type": "e2e",
+      "status": "passed",
+      "evidence": "38/38，0 error"
+    },
+    {
+      "name": "真实 GUI 端到端（启动→EC→UI→截图→停止）",
+      "type": "e2e",
+      "status": "passed",
+      "evidence": "docs/screenshots/app-live-window.png；内存 62.6 MB；温度 72/43 °C 与参照吻合"
+    },
+    {
+      "name": "温度 vs ACPI 热区",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "9 组配对，r=+0.857"
+    },
+    {
+      "name": "温度 vs nvidia-smi",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "80 组并发，r=+0.989"
+    },
+    {
+      "name": "clippy / fmt（两 crate）",
+      "type": "lint",
+      "status": "passed",
+      "evidence": "0 warning / exit 0"
+    }
   ],
-  "coverage_summary": { "lines": 86.56, "branches": null, "functions": 85.94, "statements": null, "note": "沿用 2026-10-24 core 基线；新增温度相关代码已由单测覆盖" },
-  "seams_touched": ["S4 EC 读契约（新增两个地址的读取）", "S5 寄存器地址表（新增 2 项 Verified）", "S8 前端交互（38 条断言）", "S9/S10 发布产物与版本号"],
-  "mock_scenarios_covered": ["temperature_read_ok", "temperature_read_error", "fan_boost_bit_set", "temperature_null", "temperature_hot_boundary"],
+  "coverage_summary": {
+    "lines": 86.56,
+    "branches": null,
+    "functions": 85.94,
+    "statements": null,
+    "note": "沿用 2026-10-24 core 基线；新增温度相关代码已由单测覆盖"
+  },
+  "seams_touched": [
+    "S4 EC 读契约（新增两个地址的读取）",
+    "S5 寄存器地址表（新增 2 项 Verified）",
+    "S8 前端交互（38 条断言）",
+    "S9/S10 发布产物与版本号"
+  ],
+  "mock_scenarios_covered": [
+    "temperature_read_ok",
+    "temperature_read_error",
+    "fan_boost_bit_set",
+    "temperature_null",
+    "temperature_hot_boundary"
+  ],
   "browser_validation": {
     "performed": true,
     "engine": "Playwright / Chromium（mock 后端）+ 真实窗口截图",
-    "paths": ["温度三档（正常/偏高/过热）、无数据降级、5 卡不溢出、A11y、交互全链路"],
-    "screenshots": ["docs/screenshots/app-live-window.png", "docs/screenshots/app-live-e2e.png", "docs/screenshots/ui-ready.png"]
+    "paths": [
+      "温度三档（正常/偏高/过热）、无数据降级、5 卡不溢出、A11y、交互全链路"
+    ],
+    "screenshots": [
+      "docs/screenshots/app-live-window.png",
+      "docs/screenshots/app-live-e2e.png",
+      "docs/screenshots/ui-ready.png"
+    ]
   },
-  "artifact": { "path": "app/src-tauri/target/release/mechrevo-max.exe", "size_bytes": 5130240, "sha256": "f1971d7509b9dfbc034c4b3f87775316ec08df3b52de1a482f3f0533ca714c2a" },
+  "artifact": {
+    "path": "app/src-tauri/target/release/mechrevo-max.exe",
+    "size_bytes": 5130240,
+    "sha256": "f1971d7509b9dfbc034c4b3f87775316ec08df3b52de1a482f3f0533ca714c2a"
+  },
   "limitations": [
     "温度只在本机（GM6PQ0X）验证；换机型必须重测（地址不通用）",
     "温度精度为 ±1 °C 级整数、有约 +1~+2 °C 固定偏差；未做长时间漂移标定",
     "真实 GUI 验证为单次启动 + 截图；未做反复启停或多分辨率矩阵",
     "真机写入路径（切档/写功耗）的端到端行为仍未在本轮验证（只读了数据）",
     "安装包在干净机器实装仍未做（用户已明确暂不管）"
-  ]
+  ],
+  "release": {
+    "tag": "v0.2.0",
+    "url": "https://github.com/lza6/Mechrevo-Max/releases/tag/v0.2.0",
+    "assets": [
+      {
+        "name": "mechrevo-max.exe",
+        "size_bytes": 5130240
+      },
+      {
+        "name": "Mechrevo-Max_0.2.0_x64_en-US.msi",
+        "size_bytes": 1990656
+      },
+      {
+        "name": "Mechrevo-Max_0.2.0_x64-setup.exe",
+        "size_bytes": 1364018
+      }
+    ],
+    "verified_via": "GitHub API releases/tags/v0.2.0（draft=false，三个资产；latest=v0.2.0）",
+    "verified_at": "2026-10-24T23:16:09+08:00"
+  },
+  "ci": {
+    "run_id": 40105677271,
+    "head_sha": "9789b0b",
+    "conclusion": "success",
+    "jobs": [
+      "build · test · lint → success",
+      "coverage（core）→ success",
+      "打包冒烟（msi/nsis）→ success"
+    ],
+    "verified_at": "2026-10-24T23:16:09+08:00"
+  }
 }

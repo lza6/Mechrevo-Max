@@ -482,31 +482,47 @@ mod tests {
         }
     }
 
-    /// 只断言**环境无关的不变量**。
+    /// 解析器确定性测试：喂**固定 JSON**，断言解析结果。
     ///
-    /// 教训（2026-10-25，CI 上翻车）：这里原本断言"磁盘型号非空、CPU 型号非空"，
-    /// 结果在 GitHub 的 Windows 虚拟机上 `Get-PhysicalDisk` 的 FriendlyName 可能是空串，
-    /// 测试直接红 —— 而产品本身没有问题。**测试不该依赖某台机器的具体硬件事实**，
-    /// 只该依赖"解析出来的结构是否自洽"。
+    /// 教训（2026-10-25，CI 连红两次）：最初这里断言"磁盘型号非空、电池容量非 0"，
+    /// 结果 GitHub 的 Windows 虚拟机既没有真电池（`BatteryStatus` 类存在但容量为 0）、
+    /// `Get-PhysicalDisk` 的 FriendlyName 也可能为空 —— 测试红了但产品没坏。
+    /// **解析逻辑要用 fixture 测；真机只做"不 panic"的冒烟。**
     #[test]
-    fn slow_query_produces_structurally_valid_data() {
-        let data = query_slow();
-        if let Some(b) = &data.battery {
-            assert!(
-                b.full_mwh > 0 || b.remaining_mwh > 0,
-                "电池存在时容量字段不应全为 0"
-            );
-            assert!(b.voltage_mv < 30_000, "电压不合理: {} mV", b.voltage_mv);
-        }
-        if let Some(d) = &data.disk {
-            assert!(d.size_gb > 0, "磁盘存在时容量应 > 0");
-            if let Some(t) = d.temp_c {
-                assert!(t < 120, "磁盘温度不合理: {t}");
-            }
-        }
-        if let Some(dev) = &data.device {
-            assert!(dev.cpu_threads > 0, "逻辑处理器数应 > 0");
-        }
+    #[cfg(windows)]
+    fn parses_known_payload_exactly() {
+        let json = r#"{"battery":{"on_ac":true,"charging":false,"discharging":false,"remaining_mwh":46740,"full_mwh":46740,"design_mwh":0,"voltage_mv":11986,"cycles":null,"temp_c":null},"disk":{"model":"YMTC PC300-1TB-B","size_gb":953,"health":"Healthy","temp_c":41,"temp_max_c":83,"wear_pct":0},"device":{"cpu":"12th Gen Intel(R) Core(TM) i9-12900HX","cpu_threads":24,"cpu_cores":16,"os":"Microsoft Windows 10 Pro"}}"#;
+        let data = imp::parse_slow(json);
+
+        let b = data.battery.expect("电池应被解析");
+        assert!(b.on_ac && !b.charging && !b.discharging);
+        assert_eq!(b.full_mwh, 46740);
+        assert_eq!(b.remaining_mwh, 46740);
+        assert_eq!(b.voltage_mv, 11986);
+        assert_eq!(
+            b.design_mwh, 0,
+            "本机不提供设计容量 → 0，界面显示‘本机不提供’"
+        );
+        assert!(b.cycles.is_none(), "null 应解析为 None 而不是 0");
+
+        let d = data.disk.expect("磁盘应被解析");
+        assert_eq!(d.model, "YMTC PC300-1TB-B");
+        assert_eq!(d.size_gb, 953);
+        assert_eq!(d.temp_c, Some(41));
+        assert_eq!(d.temp_max_c, Some(83));
+        assert_eq!(d.wear_pct, Some(0));
+
+        let dev = data.device.expect("静态信息应被解析");
+        assert!(dev.cpu.contains("i9-12900HX"));
+        assert_eq!(dev.cpu_threads, 24);
+        assert_eq!(dev.cpu_cores, 16);
+        assert!(dev.os.contains("Windows"));
+    }
+
+    /// 真机冒烟：只保证「跑得通、不 panic」，不对具体硬件下断言。
+    #[test]
+    fn slow_query_runs_without_panicking() {
+        let _ = query_slow();
     }
 
     #[test]

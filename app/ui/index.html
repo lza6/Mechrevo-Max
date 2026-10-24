@@ -7,117 +7,99 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="shell">
+  <div class="app">
+    <!-- 背景波纹 -->
+    <div class="wave" aria-hidden="true"></div>
 
-    <!-- 顶栏 -->
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <div class="brand-text">
-          <strong>机械革命控制台</strong>
-          <span class="brand-sub">Mechrevo-Max · 自研</span>
+    <!-- 侧栏 -->
+    <nav class="sidebar" aria-label="主导航">
+      <div class="side-brand">
+        <span class="side-mark" aria-hidden="true"></span>
+        <div>
+          <strong>Mechrevo-Max</strong>
+          <em id="side-version">自研控制台</em>
         </div>
       </div>
 
-      <div class="topbar-right">
+      <ul class="nav" id="nav">
+        <li><button class="nav-item" data-page="overview"><span class="nav-ico">◎</span>概览</button></li>
+        <li><button class="nav-item" data-page="monitor"><span class="nav-ico">▤</span>系统监控</button></li>
+        <li><button class="nav-item" data-page="device"><span class="nav-ico">▣</span>设备信息</button></li>
+        <li><button class="nav-item" data-page="battery"><span class="nav-ico">▮</span>电池</button></li>
+        <li><button class="nav-item" data-page="performance"><span class="nav-ico">⚡</span>性能</button></li>
+        <li><button class="nav-item" data-page="cooling"><span class="nav-ico">≋</span>风扇曲线</button></li>
+        <li><button class="nav-item" data-page="advanced"><span class="nav-ico">⚙</span>高级</button></li>
+      </ul>
+
+      <div class="side-foot">
         <div class="pill" id="ec-pill" data-state="pending">
-          <span class="dot"></span>
-          <span id="ec-text">正在检测 EC…</span>
+          <span class="dot"></span><span id="ec-text">正在检测 EC…</span>
         </div>
         <div class="pill ghost">
-          <span class="pill-label">项目 ID</span>
-          <span class="pill-value mono" id="project-id">—</span>
+          <span class="pill-label">项目 ID</span><span class="pill-value mono" id="project-id">—</span>
         </div>
-        <div class="pill ghost" title="界面每 2 秒从硬件读一次；这里显示实际采样情况">
-          <span class="pill-label">采样</span>
-          <span class="pill-value mono" id="sample-info">—</span>
+        <div class="pill ghost" title="界面每 2 秒从硬件读一次">
+          <span class="pill-label">采样</span><span class="pill-value mono" id="sample-info">—</span>
         </div>
       </div>
-    </header>
+    </nav>
 
-    <!-- EC 不可用提示 -->
-    <section class="alert" id="ec-alert" role="alert" hidden>
-      <div class="alert-head" id="ec-alert-title">EC 通道不可用</div>
-      <p class="alert-body" id="ec-alert-msg"></p>
-      <div id="alert-driver">
-        <p class="alert-hint">请以管理员身份打开 PowerShell 执行：</p>
-        <pre class="alert-code">sc.exe start UWACPIDriver
+    <!-- 内容 -->
+    <main class="content">
+      <section class="alert" id="ec-alert" role="alert" hidden>
+        <div class="alert-head" id="ec-alert-title">EC 通道不可用</div>
+        <p class="alert-body" id="ec-alert-msg"></p>
+        <div id="alert-driver">
+          <p class="alert-hint">请以管理员身份打开 PowerShell 执行：</p>
+          <pre class="alert-code">sc.exe start UWACPIDriver
 pnputil.exe /scan-devices</pre>
-      </div>
-      <button class="btn" id="relaunch" hidden>以管理员身份重启</button>
-    </section>
-
-    <main class="stage" id="stage">
-
-      <!-- 左栏：档位 + 强冷 -->
-      <section class="rail" aria-labelledby="mode-heading">
-        <h2 class="rail-title" id="mode-heading">运行档位</h2>
-        <div class="mode-list" id="mode-list">
-          <button class="mode-btn" data-mode="office">
-            <span class="mode-name">办公</span>
-            <span class="mode-desc">安静 · 功耗保守</span>
-          </button>
-          <button class="mode-btn" data-mode="balance">
-            <span class="mode-name">均衡</span>
-            <span class="mode-desc">日常 · 游戏默认曲线</span>
-          </button>
-          <button class="mode-btn" data-mode="turbo">
-            <span class="mode-name">狂暴</span>
-            <span class="mode-desc">最高性能 · 风扇激进</span>
-          </button>
         </div>
+        <button class="btn" id="relaunch" hidden>以管理员身份重启</button>
+      </section>
 
-        <!-- 位域解释：把"黑匣子"拆开给用户看 -->
-        <div class="bitfield">
-          <div class="bitfield-head">
-            <span class="mono" id="mode-raw">751=— · 7AB=—</span>
-            <span class="bitfield-note">档位字段原始值</span>
-          </div>
-          <dl class="bitfield-rows">
-            <div><dt>档位编码</dt><dd id="bf-mode">—</dd></div>
-            <div><dt>bit6 强冷</dt><dd id="bf-fanboost">—</dd></div>
-          </dl>
-          <p class="hint" id="mode-source">档位由机器固件/EC 决定，本程序仅读取；启动时不会写入。</p>
+      <!-- 概览 -->
+      <section class="page" data-page="overview">
+        <h1 class="page-title">概览</h1>
+        <div class="gauge-grid">
+          <div class="gauge-card"><div id="g-cpu-util"></div><p class="gauge-sub" id="g-cpu-name">—</p></div>
+          <div class="gauge-card"><div id="g-cpu-temp"></div></div>
+          <div class="gauge-card"><div id="g-gpu-util"></div><p class="gauge-sub" id="g-gpu-name">—</p></div>
+          <div class="gauge-card"><div id="g-gpu-temp"></div></div>
+          <div class="gauge-card"><div id="g-gpu-power"></div></div>
+          <div class="gauge-card"><div id="g-mem"></div></div>
+          <div class="gauge-card"><div id="g-battery"></div></div>
+          <div class="gauge-card"><div id="g-disk-temp"></div></div>
         </div>
-
-        <div class="rail-foot">
-          <label class="switch" for="fan-boost">
-            <input type="checkbox" id="fan-boost" />
-            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
-            <span class="switch-label">强冷模式<em>0x751 bit6</em></span>
-          </label>
-          <div class="row-actions">
-            <button class="btn subtle" id="undo-mode" disabled>撤销档位</button>
-            <button class="btn subtle" id="undo-fan" disabled>撤销强冷</button>
-          </div>
+        <div class="chip-row">
+          <span class="chip" id="chip-mode">档位 —</span>
+          <span class="chip" id="chip-boost">强冷 —</span>
+          <span class="chip" id="chip-ac">供电 —</span>
+          <span class="chip" id="chip-fan">风扇 —</span>
         </div>
       </section>
 
-      <!-- 右栏 -->
-      <section class="stage-main">
-
-        <!-- 传感器表（HWiNFO 风格：当前 / 最小 / 平均 / 最大） -->
-        <section class="panel" aria-labelledby="sensors-heading">
+      <!-- 系统监控 -->
+      <section class="page" data-page="monitor" hidden>
+        <h1 class="page-title">系统监控</h1>
+        <div class="panel">
           <div class="panel-head">
-            <h2 id="sensors-heading">传感器</h2>
-            <span class="panel-meta" id="sensors-meta">—</span>
+            <h2>实时读数</h2>
+            <span class="panel-meta" id="monitor-meta">—</span>
           </div>
           <table class="sensors" id="sensor-table">
             <thead>
-              <tr>
-                <th scope="col">项目</th>
-                <th scope="col">当前</th>
-                <th scope="col">最小</th>
-                <th scope="col">平均</th>
-                <th scope="col">最大</th>
-                <th scope="col">状态</th>
-              </tr>
+              <tr><th scope="col">项目</th><th scope="col">当前</th><th scope="col">最小</th><th scope="col">平均</th><th scope="col">最大</th><th scope="col">状态</th></tr>
             </thead>
             <tbody>
+              <tr data-sensor="cpu_util"><th scope="row">CPU 使用率</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
               <tr data-sensor="cpu_temp"><th scope="row">CPU 温度</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
+              <tr data-sensor="gpu_util"><th scope="row">GPU 使用率</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
               <tr data-sensor="gpu_temp"><th scope="row">GPU 温度</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
+              <tr data-sensor="gpu_power"><th scope="row">GPU 功耗</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
+              <tr data-sensor="mem"><th scope="row">内存使用率</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
               <tr data-sensor="cpu_fan"><th scope="row">CPU 风扇</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
               <tr data-sensor="gpu_fan"><th scope="row">GPU 风扇</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
+              <tr data-sensor="battery"><th scope="row">电池电量</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
               <tr data-sensor="power_src"><th scope="row">供电</th><td class="v" data-col="cur">—</td><td data-col="min">—</td><td data-col="avg">—</td><td data-col="max">—</td><td data-col="state">—</td></tr>
             </tbody>
           </table>
@@ -126,116 +108,232 @@ pnputil.exe /scan-devices</pre>
             <div class="spacer"></div>
             <button class="btn subtle" id="reset-stats">清零统计</button>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- 功耗墙 -->
-        <section class="panel" aria-labelledby="power-heading">
-          <div class="panel-head">
-            <h2 id="power-heading">默认功耗墙</h2>
-            <div class="tabs" id="power-tabs" role="tablist" aria-labelledby="power-heading">
-              <button class="tab" role="tab" data-power-mode="gaming" aria-controls="sliders" aria-selected="true">游戏</button>
-              <button class="tab" role="tab" data-power-mode="office" aria-controls="sliders" aria-selected="false">办公</button>
+      <!-- 设备信息 -->
+      <section class="page" data-page="device" hidden>
+        <h1 class="page-title">设备信息</h1>
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-head"><h2>处理器</h2></div>
+            <dl class="kv">
+              <div><dt>型号</dt><dd id="dev-cpu">—</dd></div>
+              <div><dt>核心 / 线程</dt><dd id="dev-cpu-cores">—</dd></div>
+              <div><dt>当前占用</dt><dd id="dev-cpu-util">—</dd></div>
+              <div><dt>当前温度</dt><dd id="dev-cpu-temp">—</dd></div>
+              <div><dt>风扇转速</dt><dd id="dev-cpu-fan">—</dd></div>
+            </dl>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>显卡</h2></div>
+            <dl class="kv">
+              <div><dt>型号</dt><dd id="dev-gpu">—</dd></div>
+              <div><dt>占用 / 显存占用</dt><dd id="dev-gpu-util">—</dd></div>
+              <div><dt>温度 / 功耗</dt><dd id="dev-gpu-temp">—</dd></div>
+              <div><dt>核心 / 显存频率</dt><dd id="dev-gpu-clock">—</dd></div>
+              <div><dt>显存已用</dt><dd id="dev-gpu-vram">—</dd></div>
+            </dl>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>内存</h2></div>
+            <dl class="kv">
+              <div><dt>总量</dt><dd id="dev-mem-total">—</dd></div>
+              <div><dt>已用 / 占用率</dt><dd id="dev-mem-used">—</dd></div>
+            </dl>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>存储</h2></div>
+            <dl class="kv">
+              <div><dt>型号</dt><dd id="dev-disk">—</dd></div>
+              <div><dt>容量 / 健康</dt><dd id="dev-disk-cap">—</dd></div>
+              <div><dt>温度 / 上限</dt><dd id="dev-disk-temp">—</dd></div>
+              <div><dt>磨损</dt><dd id="dev-disk-wear">—</dd></div>
+            </dl>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>系统</h2></div>
+            <dl class="kv">
+              <div><dt>操作系统</dt><dd id="dev-os">—</dd></div>
+              <div><dt>EC 项目 ID</dt><dd id="dev-project">—</dd></div>
+            </dl>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head"><h2>本程序</h2></div>
+            <dl class="kv">
+              <div><dt>版本</dt><dd id="dev-version">—</dd></div>
+              <div><dt>日志目录</dt><dd class="mono small" id="dev-log">—</dd></div>
+              <div><dt>采样间隔</dt><dd id="dev-poll">2.0 秒</dd></div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <!-- 电池 -->
+      <section class="page" data-page="battery" hidden>
+        <h1 class="page-title">电池</h1>
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-head"><h2>状态</h2><span class="panel-meta" id="batt-state">—</span></div>
+            <div class="battery-visual">
+              <div class="batt-shell"><div class="batt-fill" id="batt-fill"></div></div>
+              <strong class="batt-pct" id="batt-pct">—</strong>
             </div>
+            <dl class="kv">
+              <div><dt>剩余容量</dt><dd id="batt-remain">—</dd></div>
+              <div><dt>满充容量</dt><dd id="batt-full">—</dd></div>
+              <div><dt>电压</dt><dd id="batt-volt">—</dd></div>
+              <div><dt>EC 充电上限</dt><dd id="batt-limit">—</dd></div>
+            </dl>
           </div>
 
-          <div class="sliders" id="sliders" role="tabpanel" aria-labelledby="power-heading">
-            <div class="slider-row">
-              <label class="slider-label" for="pl1">PL1<em>长时</em></label>
-              <input type="range" id="pl1" min="5" max="200" step="1" aria-describedby="pl1-out" />
-              <output class="mono" id="pl1-out">—</output>
+          <div class="panel">
+            <div class="panel-head"><h2>健康</h2><span class="panel-meta">官方没给的部分</span></div>
+            <dl class="kv">
+              <div><dt>设计容量</dt><dd id="batt-design">—</dd></div>
+              <div><dt>损耗</dt><dd id="batt-wear">—</dd></div>
+              <div><dt>循环次数</dt><dd id="batt-cycles">—</dd></div>
+              <div><dt>电池温度</dt><dd id="batt-temp">—</dd></div>
+            </dl>
+            <p class="hint">本机 WMI 未暴露设计容量/循环次数/电池温度 —— 这些格子会显示「本机不提供」，
+              而不是编一个数字。换机型时若驱动暴露，这些会自动有值。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 性能 -->
+      <section class="page" data-page="performance" hidden>
+        <h1 class="page-title">性能</h1>
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-head"><h2>运行档位</h2><span class="panel-meta" id="mode-source">由机器固件/EC 决定，本程序仅读取</span></div>
+            <div class="mode-list" id="mode-list">
+              <button class="mode-btn" data-mode="office"><span class="mode-name">办公</span><span class="mode-desc">安静 · 功耗保守</span></button>
+              <button class="mode-btn" data-mode="balance"><span class="mode-name">均衡</span><span class="mode-desc">日常 · 游戏默认曲线</span></button>
+              <button class="mode-btn" data-mode="turbo"><span class="mode-name">狂暴</span><span class="mode-desc">最高性能 · 风扇激进</span></button>
             </div>
-            <div class="slider-row">
-              <label class="slider-label" for="pl2">PL2<em>短时</em></label>
-              <input type="range" id="pl2" min="5" max="200" step="1" aria-describedby="pl2-out" />
-              <output class="mono" id="pl2-out">—</output>
+            <div class="bitfield">
+              <div class="bitfield-head"><span class="mono" id="mode-raw">751=— · 7AB=—</span><span class="bitfield-note">原始值</span></div>
+              <dl class="bitfield-rows">
+                <div><dt>档位编码</dt><dd id="bf-mode">—</dd></div>
+                <div><dt>强冷位</dt><dd id="bf-fanboost">—</dd></div>
+              </dl>
             </div>
-            <div class="slider-row">
-              <label class="slider-label" for="pl4">PL4<em>峰值</em></label>
-              <input type="range" id="pl4" min="0" max="255" step="1" aria-describedby="pl4-out" />
-              <output class="mono" id="pl4-out">—</output>
-            </div>
-          </div>
-
-          <div class="fw-row">
-            <span class="fw-label">固件基线<em>只读 · 0x783–0x786</em></span>
-            <span class="fw-values mono" id="fw-pl">—</span>
-            <span class="hint" id="fw-note">
-              固件/BIOS 给的上限，与上面那排"默认功耗"是两回事：实测改默认 PL、切档位都不会改变它。
-            </span>
-          </div>
-
-          <p class="hint" id="power-source">
-            这是 EC 里的<strong>默认功耗寄存器</strong>（<code>0x730</code>–<code>0x736</code>）。
-            实际生效还受固件 / BIOS 与系统策略约束；「系统当前实际生效值」需要读 MSR（0x610），
-            用户态读不到 —— 见文档「已知限制」。
-          </p>
-
-          <div class="panel-actions">
-            <span class="pending mono" id="pending">未修改</span>
-            <div class="spacer"></div>
-            <button class="btn subtle" id="reset-power">重置为读回值</button>
-            <button class="btn" id="apply-power">应用</button>
-            <button class="btn subtle" id="undo-power" disabled>撤销上次</button>
-          </div>
-        </section>
-
-        <!-- 自定义配置 -->
-        <section class="panel" aria-labelledby="profiles-heading">
-          <div class="panel-head">
-            <h2 id="profiles-heading">自定义配置</h2>
-            <span class="panel-meta">功耗墙 + 强冷 存成一组，一键套用</span>
-          </div>
-          <div class="profile-form">
-            <label class="field">
-              <span>配置名</span>
-              <input type="text" id="profile-name" maxlength="32" placeholder="例如：安静办公 / 游戏全开" />
+            <label class="switch" for="fan-boost">
+              <input type="checkbox" id="fan-boost" />
+              <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+              <span class="switch-label">强冷模式</span>
             </label>
-            <button class="btn" id="save-profile">用当前滑块值保存</button>
+            <div class="row-actions">
+              <button class="btn subtle" id="undo-mode" disabled>撤销档位</button>
+              <button class="btn subtle" id="undo-fan" disabled>撤销强冷</button>
+            </div>
           </div>
-          <ul class="profile-list" id="profile-list">
-            <li class="empty">还没有自定义配置</li>
-          </ul>
-          <p class="hint">保存位置：<code id="profile-path">%LOCALAPPDATA%\Mechrevo-Max\profiles.json</code></p>
-        </section>
 
-        <!-- 寄存器浏览器 -->
-        <section class="panel" aria-labelledby="regs-heading">
-          <div class="panel-head">
-            <h2 id="regs-heading">寄存器浏览器</h2>
-            <span class="panel-meta">只读，用于自查/排障（一次最多 64 个地址）</span>
+          <div class="panel">
+            <div class="panel-head">
+              <h2>功耗墙</h2>
+              <div class="tabs" id="power-tabs" role="tablist">
+                <button class="tab" role="tab" data-power-mode="gaming" aria-controls="sliders" aria-selected="true">游戏</button>
+                <button class="tab" role="tab" data-power-mode="office" aria-controls="sliders" aria-selected="false">办公</button>
+              </div>
+            </div>
+            <div class="sliders" id="sliders" role="tabpanel">
+              <div class="slider-row">
+                <label class="slider-label" for="pl1">PL1<em>长时</em></label>
+                <input type="range" id="pl1" min="5" max="200" step="1" aria-describedby="pl1-out" />
+                <output class="mono" id="pl1-out">—</output>
+              </div>
+              <div class="slider-row">
+                <label class="slider-label" for="pl2">PL2<em>短时</em></label>
+                <input type="range" id="pl2" min="5" max="200" step="1" aria-describedby="pl2-out" />
+                <output class="mono" id="pl2-out">—</output>
+              </div>
+              <div class="slider-row">
+                <label class="slider-label" for="pl4">PL4<em>峰值</em></label>
+                <input type="range" id="pl4" min="0" max="255" step="1" aria-describedby="pl4-out" />
+                <output class="mono" id="pl4-out">—</output>
+              </div>
+            </div>
+            <div class="fw-row">
+              <span class="fw-label">固件基线<em>只读</em></span>
+              <span class="fw-values mono" id="fw-pl">—</span>
+            </div>
+            <p class="hint" id="power-source">
+              上面是可写的<strong>默认功耗寄存器</strong>，下面两排是固件基线。实测：改默认值、切档位都不会改变固件基线；
+              若要确认"功耗真的被限制住了"，需要读 MSR（用户态无权限）。
+            </p>
+            <div class="panel-actions">
+              <span class="pending mono" id="pending">未修改</span>
+              <div class="spacer"></div>
+              <button class="btn subtle" id="reset-power">重置</button>
+              <button class="btn" id="apply-power">应用</button>
+              <button class="btn subtle" id="undo-power" disabled>撤销上次</button>
+            </div>
           </div>
+
+          <div class="panel span-2">
+            <div class="panel-head"><h2>自定义配置</h2><span class="panel-meta">功耗墙 + 强冷 存成一组，一键套用</span></div>
+            <div class="profile-form">
+              <label class="field"><span>配置名</span><input type="text" id="profile-name" maxlength="32" placeholder="例如：安静办公 / 游戏全开" /></label>
+              <button class="btn" id="save-profile">用当前滑块值保存</button>
+            </div>
+            <ul class="profile-list" id="profile-list"><li class="empty">还没有自定义配置</li></ul>
+            <p class="hint">保存位置：<code id="profile-path">%LOCALAPPDATA%\Mechrevo-Max\profiles.json</code></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 风扇曲线 -->
+      <section class="page" data-page="cooling" hidden>
+        <h1 class="page-title">风扇曲线</h1>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>温度与转速的关系</h2>
+            <span class="panel-meta" id="curve-meta">自动读取中…</span>
+          </div>
+          <div class="curve-body" id="curve-body">
+            <p class="hint">正在从 EC 读取曲线表…</p>
+          </div>
+          <div class="panel-actions">
+            <span class="hint" id="curve-note">只读展示。官方只保存表名（如 M1T1），曲线数值不在本机备份里，因此这里的配对是**按数据特征推测**的。</span>
+            <div class="spacer"></div>
+            <button class="btn subtle" id="reload-curves">重新读取</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 高级 -->
+      <section class="page" data-page="advanced" hidden>
+        <h1 class="page-title">高级</h1>
+        <div class="panel">
+          <div class="panel-head"><h2>寄存器浏览器</h2><span class="panel-meta">只读 · 一次最多 64 个地址</span></div>
           <div class="reg-form">
             <input type="text" id="reg-addrs" placeholder="0x751 0x730-0x732 0x43E"
-                   aria-label="要读取的地址，空格分隔，支持 0x730-0x735 区间" />
+                   aria-label="要读取的地址，空格分隔，支持区间" />
             <button class="btn" id="read-regs">读取</button>
             <button class="btn subtle" id="export-regs" disabled>导出 CSV</button>
           </div>
           <div class="reg-out mono" id="reg-out" aria-live="polite">—</div>
-        </section>
-
-        <!-- 风扇曲线（只读） -->
-        <section class="panel" aria-labelledby="curve-heading">
-          <div class="panel-head">
-            <h2 id="curve-heading">风扇曲线</h2>
-            <span class="panel-meta">只读 · EC 0x0F00–0x0F5F · 6 个 16 字节表</span>
-          </div>
-          <div class="reg-form">
-            <span class="hint" style="flex:1">
-              官方 profile 里只存了表名（如 <code>M1T1</code>），真正的曲线数值不在本机备份中，
-              所以下面的「温度块 ↔ 占空比块」配对是<strong>按数据特征做的候选</strong>，未经交叉核对。
-              <strong>本程序不会写这些表</strong>（写错风扇可能不转 → 过热）。
-            </span>
-            <button class="btn" id="load-curves">读取曲线</button>
-          </div>
-          <div class="curve-body" id="curve-body">
-            <p class="hint">点「读取曲线」从 EC 读一次（96 次只读访问，约 2 秒）。</p>
-          </div>
-        </section>
-
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>说明与边界</h2></div>
+          <ul class="notes">
+            <li>所有 EC 访问只读/写入都经进程级闸门（间隔 ≥20 ms 且不重叠），默认 50 次/秒。</li>
+            <li>电池的设计容量、循环次数、温度：本机 WMI 不暴露，界面显示「本机不提供」。</li>
+            <li>CPU/GPU 使用率、内存、GPU 功耗、SSD 温度与磨损：全部免驱读取，不经过 EC。</li>
+            <li>风扇曲线写入未实现（写错风扇可能不转 → 过热），只读展示用于核对。</li>
+            <li>本程序不联网、不上报任何数据。</li>
+          </ul>
+        </div>
       </section>
     </main>
 
-    <!-- 底部状态 / 日志 -->
     <footer class="statusbar">
       <span id="status-msg" role="status" aria-live="polite">就绪</span>
       <span id="persist-error" class="persist-error" role="status" aria-live="polite" hidden></span>
@@ -243,7 +341,6 @@ pnputil.exe /scan-devices</pre>
       <span class="mono hint" id="log-path">—</span>
       <span class="mono" id="clock">—</span>
     </footer>
-    <!-- 常驻 live 区：role="alert" + hidden 切换时播报不稳定 -->
     <div id="alert-live" class="sr-only" role="alert" aria-live="assertive"></div>
   </div>
 

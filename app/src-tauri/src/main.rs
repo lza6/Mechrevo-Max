@@ -19,6 +19,7 @@ use tauri::State;
 
 mod logging;
 mod profiles;
+mod sysinfo;
 
 /// 最近一次改动，用于一键撤销.
 #[derive(Default)]
@@ -39,6 +40,8 @@ struct AppState {
     ec: Mutex<()>,
     /// 最近一次改动，用于一键撤销.
     undo: Mutex<UndoStack>,
+    /// 系统信息采样器（CPU/内存/GPU/电池/SSD，全部免驱只读）.
+    sampler: sysinfo::SysSampler,
     /// 最近一次失败的原因 —— 让失败"留在界面上"而不是两秒后消失.
     ///
     /// 此前失败只写进状态栏，下一次轮询就把文案冲掉，用户回头看不出发生过什么。
@@ -131,6 +134,8 @@ struct StatusPayload {
     can_undo_power: bool,
     can_undo_mode: bool,
     can_undo_fan_boost: bool,
+    /// 系统信息（CPU/内存/GPU/电池/SSD/静态设备信息）.
+    system: sysinfo::SysSnapshot,
     /// 上一次失败的原因（成功后清空）.
     last_error: Option<String>,
 }
@@ -208,6 +213,7 @@ fn unavailable_with(
         can_undo_power,
         can_undo_mode,
         can_undo_fan_boost: false,
+        system: sysinfo::SysSnapshot::default(),
         last_error: None,
     }
 }
@@ -248,6 +254,23 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
 
     // 档位字段只读一次：`current()` 与 `raw_fields()` 都会读 0x751，
     // 合并后每轮轮询少一次 EC 访问（20 ms 限速下等于少 20 ms 延迟）。
+    let mut system = state.sampler.sample();
+
+    // 电池百分比：满充容量与剩余容量都读到时才算，避免给出假数字
+    if let Some(b) = system.battery.as_mut() {
+        if b.full_mwh > 0 {
+            b.percent =
+                ((u64::from(b.remaining_mwh) * 100) / u64::from(b.full_mwh)).min(100) as u32;
+        }
+        // EC 里的充电上限（0x7B9，低 7 位为百分比）——只读；读不到就不显示
+        if let Ok(raw) = ec.read(0x07B9) {
+            let pct = raw & 0x7F;
+            if (1..=100).contains(&pct) {
+                b.charge_limit_pct = Some(pct);
+            }
+        }
+    }
+
     let fan_boost = mode_ctl.fan_boost().ok();
     let firmware_power = power_ctl
         .read_firmware_baseline()
@@ -279,6 +302,7 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
             .map(PowerLimitsDto::from),
         fan_boost,
         firmware_power,
+        system,
         can_undo_power,
         can_undo_mode,
         can_undo_fan_boost,
@@ -916,9 +940,13 @@ fn fit_window_to_monitor(app: &mut tauri::App) {
     use tauri::{Manager as _, PhysicalPosition, PhysicalSize};
 
     let Some(window) = app.get_webview_window("main") else {
+        log::error!("[窗口] 找不到 main 窗口!");
         return;
     };
-    let Ok(Some(monitor)) = window.current_monitor() else {
+    let monitor = window.current_monitor();
+    log::info!("[窗口] current_monitor = {monitor:?}");
+    let Ok(Some(monitor)) = monitor else {
+        log::error!("[窗口] 没有可用显示器，跳过尺寸适配");
         return;
     };
 
@@ -929,7 +957,18 @@ fn fit_window_to_monitor(app: &mut tauri::App) {
     let w = (f64::from(screen.width) * 0.90).clamp(720.0, 1440.0) as u32;
     let h = (f64::from(screen.height) * 0.90).clamp(520.0, 980.0) as u32;
 
-    let _ = window.set_size(PhysicalSize::new(w, h));
+    log::info!(
+        "[窗口] 计算尺寸 w={w} h={h}（屏幕 {}x{}）",
+        screen.width,
+        screen.height
+    );
+    if let Err(e) = window.set_size(PhysicalSize::new(w, h)) {
+        log::error!("[窗口] set_size 失败: {e}");
+    }
+    if let Err(e) = window.show() {
+        log::error!("[窗口] show 失败: {e}");
+    }
+    log::info!("[窗口] 完成适配, visible={:?}", window.is_visible());
 
     // 定位到显示器左上角留固定边距.
     // 刻意不用 center()/居中计算 —— 在 150% 缩放下 Tauri 的坐标换算不一致,

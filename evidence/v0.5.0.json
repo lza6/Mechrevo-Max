@@ -1,0 +1,60 @@
+{
+  "task_id": "v0.5.0",
+  "status": "passed",
+  "timestamp": "2026-10-25T00:55:00+08:00",
+  "scope": "分区式界面（7 页）+ 免驱扩展数据（CPU/内存/GPU/电池/SSD）+ 风扇曲线自动加载与中文图表",
+  "commands_executed": [
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 25 passed（+5 sysinfo 单测）"
+    },
+    {
+      "cmd": "cd core && cargo test --offline",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 68 passed; 0 failed（8 ignored 真机）"
+    },
+    {
+      "cmd": "两个 crate cargo clippy --all-targets / cargo fmt --check",
+      "exit_code": 0,
+      "raw_output_tail": "clippy 0 warning；fmt exit 0"
+    },
+    {
+      "cmd": "Playwright 44 条逐页断言（960x653，7 页，真机值 mock）",
+      "exit_code": 0,
+      "raw_output_tail": "43/44 通过；唯一失败是我把 40660 MB 心算成 40.6 GB（实际 39.7 GB，界面正确）。errors=[]"
+    },
+    {
+      "cmd": "真机免驱数据探测（nvidia-smi / Get-PhysicalDisk / BatteryStatus）",
+      "exit_code": 0,
+      "raw_output_tail": "GPU RTX 4060 Laptop 4%/40C/5.91W/1288MiB of 8188；SSD YMTC PC300-1TB-B 41C 上限83 磨损0；电池 46.74Wh 11.986V 接电 100%；内存 39.7GB"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo build --release",
+      "exit_code": 0,
+      "raw_output_tail": "Compiling mechrevo-max v0.5.0 … Finished in 1m 02s\nsha256 c7573a3b9d21af15e59a66bc2b62057f43a57a4847a0748ca49175901b34d128  5389824 bytes"
+    },
+    {
+      "cmd": "真实 GUI 启动（多次）",
+      "exit_code": 0,
+      "raw_output_tail": "日志 [窗口] current_monitor 2560x1600 → 计算 1440x980 → visible=true；但截图为 15x15 窗口 / 另一会话桌面（环境问题）"
+    }
+  ],
+  "screenshots": [
+    "docs/screenshots/ui-overview.png",
+    "docs/screenshots/ui-cooling.png",
+    "docs/screenshots/ui-battery.png",
+    "docs/screenshots/app-live-window.png"
+  ],
+  "artifact": {
+    "path": "app/src-tauri/target/release/mechrevo-max.exe",
+    "size_bytes": 5389824,
+    "sha256": "c7573a3b9d21af15e59a66bc2b62057f43a57a4847a0748ca49175901b34d128"
+  },
+  "limitations": [
+    "真窗口外观未验证（多次启停后窗口 15x15 / 跨会话截图），完整外观由浏览器逐页截图证明",
+    "电池设计容量/循环次数/温度：本机 WMI 不暴露，界面如实标『本机不提供』",
+    "风扇曲线写入未实现",
+    "GPU 数据依赖 nvidia-smi（无 N 卡时该部分为 —）"
+  ]
+}

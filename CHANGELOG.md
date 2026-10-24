@@ -4,6 +4,47 @@
 
 ---
 
+## [0.1.3] — 2026-10-24
+
+**执行线程修正版。** 独立调研（源码级核对）发现：Tauri v2 的 `#[tauri::command]` **默认在
+WebView2 的 UI（主）线程上同步执行**，而 `get_status` 一轮约 14 次 IOCTL、受「两次访问不重叠」
+闸门约束 ≈ 280 ms —— 等于每 2 秒卡住窗口消息循环 280 ms。这是 P3-11（「280 ms 持锁」）的**真正根因**，
+只削 IOCTL 次数治不了。
+
+### 修复
+
+- **6 个 IPC 命令全部改为 `async fn` + `tauri::async_runtime::spawn_blocking`**：
+  命令本体只做参数解析，EC 访问搬进 blocking 线程池，UI 线程不再被阻塞。
+  - `AppState` 改为 `Arc<AppState>` 共享（`State<'_, Arc<AppState>>`），因为借用型
+    `State<'_, T>` 不能搬进 `'static` 的 blocking 任务。
+  - `get_status` 改为返回 `Result<StatusPayload, String>`（「含引用的 async 命令必须返回
+    `Result`」是 Tauri 的编译期约束），但**永远返回 `Ok`**：EC 不可用仍用结构化载荷表达，
+    **前端看到的载荷形状与命令名/参数完全不变**，`ipc_contract.rs` 与 `IPC` 表零改动。
+- **`undo_power` / `undo_mode` 先判断有无记录、再碰硬件**：无记录时给准确文案
+  （「没有可撤销的功耗改动」），而不是先报「EC 不可用」；顺带让这两条路径可离线单测。
+
+### 测试
+
+- IPC 命令层单测 **4 → 7**：新增「锁中毒时 `status_snapshot` 返回 restart 提示且不带任何读数」、
+  「无功耗记录时的准确错误」、「无档位记录时的准确错误」。
+- 前端 37 条浏览器断言重构后**复跑仍 37/37 通过**，`pageerror`/`console.error` 各 0。
+- 两个 crate 的 `clippy --all-targets` 0 warning、`fmt --check` 干净；release 构建成功。
+
+### 文档事实更正
+
+- `policy.md` §1 原写「`cargo-llvm-cov` 未安装、无基线」——**已过期**。实测工具已装（0.9.1），
+  `core` 行覆盖 **86.56%**（排除 `ec/windows.rs` 后 **97.1%**）。同时把「100% 分支」改成
+  「行覆盖 ≥95% + 每个 `Result::Err` 分支都要有测试」，因为 Windows/MSVC 下分支覆盖不可测。
+- 新增接缝 S11（命令执行线程）到 `test_ledger.md`。
+
+### 已知限制
+
+- UI 线程不再被阻塞属**静态确认 + 合理推断**（源码链路完整：`tauri-macros` 默认 Blocking、
+  阻塞分支不 spawn、官方 doc 明写 async 才不阻塞主线程）；**改前/改后「拖窗口是否掉帧」的对照
+  观察仍需真机由用户完成**。
+
+---
+
 ## [Unreleased]
 
 ### 工程化（2026-10-24，无代码改动，故未单独发版）

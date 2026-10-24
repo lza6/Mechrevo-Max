@@ -1,0 +1,106 @@
+{
+  "task_id": "v0.1.3",
+  "status": "passed",
+  "timestamp": "2026-10-24T22:05:00+08:00",
+  "scope": "执行线程修正：6 个 IPC 命令由「UI 线程上同步执行」改为 `async fn` + `spawn_blocking`；undo_* 先查记录再碰硬件；修正 policy 里过期的覆盖率事实",
+  "trigger": "独立调研（explorer 子代理）源码级核对：Tauri v2 `#[tauri::command]` 默认 `ExecutionContext::Blocking`，阻塞分支不 spawn → 命令跑在 WebView2 UI 线程上",
+  "root_cause_correction": "此前把 P3-11 记为「get_status 280ms 持锁 + IOCTL 次数多」，根因分析停留在锁与次数；真正根因是**执行线程选错**。只削 IOCTL 次数只能把 280ms 变成 160ms，治不了 UI 线程被占",
+  "commands_executed": [
+    {
+      "cmd": "sed -n '35,70p' ~/.cargo/registry/src/*/tauri-macros-2.7.3/src/command/wrapper.rs",
+      "exit_code": 0,
+      "raw_output_tail": "wrapper_attributes 默认构造中 execution_context: ExecutionContext::Blocking（第 50 行）；仅 WrapperAttributeKind::Async 或 function.sig.asyncness.is_some() 才改为 ExecutionContext::Async"
+    },
+    {
+      "cmd": "sed -n '40,60p' ~/.cargo/registry/src/*/tauri-macros-2.7.3/src/lib.rs",
+      "exit_code": 0,
+      "raw_output_tail": "## `async`\n\nRuns the command on the async runtime instead of blocking the main thread.\n\n`async fn` commands are always executed asynchronously, so this option is only needed for synchronous functions that should not run on the main thread"
+    },
+    {
+      "cmd": "grep -n 'async_runtime::spawn_blocking' 核对 ~/.cargo/registry/src/*/tauri-2.12.4/src/async_runtime.rs:311-318",
+      "exit_code": 0,
+      "raw_output_tail": "pub fn spawn_blocking<F, R>(func: F) -> JoinHandle<R> where F: FnOnce() -> R + Send + 'static, R: Send + 'static —— 文档：Runs the provided function on an executor dedicated to blocking operations"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo check --offline --all-targets",
+      "exit_code": 0,
+      "raw_output_tail": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.51s。（中途遇到两条硬约束：含引用的 async 命令必须返回 Result；借用型 State 不能搬进 'static → AppState 改 Arc）"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max",
+      "exit_code": 0,
+      "raw_output_tail": "running 7 tests\ntest tests::status_snapshot_reports_restart_hint_when_ec_lock_poisoned ... ok\ntest tests::undo_power_without_record_reports_clear_error_before_touching_hardware ... ok\ntest tests::undo_mode_without_record_reports_clear_error_before_touching_hardware ... ok\ntest result: ok. 7 passed; 0 failed"
+    },
+    {
+      "cmd": "cd core && cargo test --offline",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 46 passed; 0 failed; 0 ignored (lib)\ntest result: ok. 0 passed; 0 failed; 7 ignored (hardware)\ntest result: ok. 1 passed (doctest)"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --test ipc_contract",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 8 passed; 0 failed; 0 ignored"
+    },
+    {
+      "cmd": "两个 crate 的 cargo clippy --offline --all-targets 与 cargo fmt --check",
+      "exit_code": 0,
+      "raw_output_tail": "clippy 无 warning:/error: 行输出（两个包均 0 warning）；fmt --check 两个包均 exit 0"
+    },
+    {
+      "cmd": "node --check app/ui/app.js",
+      "exit_code": 0,
+      "raw_output_tail": "(no output) js ok"
+    },
+    {
+      "cmd": "Playwright(Chromium) 复跑 37 条前端断言（重构后回归）",
+      "exit_code": 0,
+      "raw_output_tail": "{\"total\":37,\"failed\":[],\"errors\":[]} —— 37/37 通过，pageerror 与 console.error 各 0"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo build --release --offline",
+      "exit_code": 0,
+      "raw_output_tail": "   Compiling mechrevo-max v0.1.3 (...)\n    Finished `release` profile [optimized] target(s) in 1m 15s\n1b279b8552d8e67ced6d2ae927c25d89de3697369a3aa207372255225c159c7b  5091840"
+    }
+  ],
+  "files_changed": [
+    "app/src-tauri/src/main.rs（命令拆成同步业务体 + async spawn_blocking 包装；AppState → Arc；undo_* 顺序调整；+3 单测）",
+    "app/src-tauri/Cargo.toml、core/Cargo.toml、app/src-tauri/tauri.conf.json（版本 0.1.3）",
+    "policy.md（覆盖率事实更正 + 门禁改为可验证形式）",
+    "test_ledger.md（新增接缝 S11 命令执行线程）",
+    ".agent/memory/known-issues.md（P3-11 根因更正 + N1–N5 调研发现）",
+    "CHANGELOG.md（0.1.3 段）"
+  ],
+  "ipc_contract_impact": "命令名、参数名、成功载荷形状、EC 不可用载荷形状全部不变；get_status 仅返回类型由 StatusPayload 变为 Result<StatusPayload, String> 且永远 Ok，前端不可感知",
+  "tests": [
+    { "name": "IPC 命令层单测", "type": "unit", "status": "passed", "evidence": "4 → 7 passed" },
+    { "name": "core 单测 + doctest", "type": "unit", "status": "passed", "evidence": "46 + 1 passed" },
+    { "name": "IPC 契约", "type": "integration", "status": "passed", "evidence": "8 passed" },
+    { "name": "前端浏览器断言（回归）", "type": "e2e", "status": "passed", "evidence": "37/37，0 error" },
+    { "name": "clippy / fmt（两 crate）", "type": "lint", "status": "passed", "evidence": "0 warning / exit 0" },
+    { "name": "release 构建", "type": "build", "status": "passed", "evidence": "5091840 B" },
+    { "name": "UI 线程不再阻塞（帧率对照）", "type": "manual", "status": "blocked", "evidence": "需真机由用户观察「改前/改后拖窗口」；代码层为静态确认 + 合理推断" },
+    { "name": "真机硬件测试", "type": "integration", "status": "skipped", "evidence": "7 个 #[ignore]，按 SPEC §5.1 不执行" }
+  ],
+  "coverage_summary": {
+    "lines": 86.56,
+    "branches": null,
+    "functions": 85.94,
+    "statements": null,
+    "note": "core 包实测（cargo llvm-cov 0.9.1，2026-10-24）；排除 ec/windows.rs 后行覆盖 97.1%。Windows/MSVC 下 Branches 列不可用，故为 null"
+  },
+  "seams_touched": ["S11 命令执行线程", "S1/S2 IPC 命令与参数（形状未变，契约测试复跑通过）", "S8 前端交互（复跑 37 条）"],
+  "mock_scenarios_covered": ["lock_poison", "no_undo_record", "slow_backend", "driver_missing", "elevation_required", "unknown_mode_encoding"],
+  "browser_validation": { "performed": true, "engine": "Playwright / Chromium", "paths": ["5 场景 + 未知编码场景，共 37 断言"], "screenshots": ["docs/screenshots/ui-ready.png", "docs/screenshots/ui-ec-unavailable.png", "docs/screenshots/ui-need-admin.png"] },
+  "artifact": {
+    "path": "app/src-tauri/target/release/mechrevo-max.exe",
+    "size_bytes": 5091840,
+    "sha256": "1b279b8552d8e67ced6d2ae927c25d89de3697369a3aa207372255225c159c7b"
+  },
+  "limitations": [
+    "「UI 线程不再被阻塞」为静态确认（源码链路完整）+ 合理推断；无真机帧率对照数据（需用户在场）",
+    "async 命令本身没有 Tauri 级单测（需 tauri::test），只覆盖了同步业务体",
+    "真机硬件链路仍未验证（写后读回、撤销后固件是否重应用）",
+    "覆盖率仅 core；app 的 main.rs 未统计",
+    "MSI/NSIS 仍未构建；WebView2 安装模式仍需改（N2）；release 下无 logger（N1）"
+  ]
+}

@@ -19,6 +19,7 @@
 | S7 | 前端 DOM ↔ JS 映射 | `app/ui/index.html` 的 id | `app/ui/app.js` 的 `ui` 映射 | 28 个 id 全匹配，缺失时首屏报错 | 2026-10-24 | **locked** | 浏览器验证（见 §3）+ `findMissingElements` 自检 |
 | S8 | 前端交互 ↔ 后端命令 | 按钮/滑块事件 | `invoke(IPC.xxx)` 调用与返回值 | 成功/失败/禁用/脏检查状态正确 | 2026-10-24 | **locked** | 浏览器 + mock 后端验证（见 §3） |
 | S9 | 发布产物 ↔ 源码 | `tag` 指向的提交 | Release 上的 `mechrevo-max.exe` | 产物由该提交构建；大小/哈希可核对 | 2026-10-24 | **locked** | v0.1.2：4 994 048 B，sha256 `c85a29ea…f33363`；API 复核 asset 大小一致 |
+| S11 | 命令执行线程 | `#[tauri::command]` 生成代码 | WebView2 UI 线程 | 命令**不得**在 UI 线程上做阻塞 EC 访问（默认 `ExecutionContext::Blocking` 会占 UI 线程） | 2026-10-24 | **locked** | 全部命令改 `async fn` + `spawn_blocking`；`cargo check --all-targets` + 7 个 bin 单测 |
 | S10 | 版本号 | `core/Cargo.toml` / `app/Cargo.toml` / `tauri.conf.json` | 发布 tag | 三处一致 + 与 tag 一致 | 2026-10-24 | **locked** | 三处均 `0.1.2`；tag `v0.1.2` |
 
 ## 2. Test Status

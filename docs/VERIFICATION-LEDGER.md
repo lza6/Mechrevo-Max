@@ -47,7 +47,7 @@
 | 项 | 状态 | 证据 | 最后改动 |
 |---|---|---|---|
 | IPC 契约测试（8 个） | ✅ 已验证 | `cargo test --test ipc_contract` → `8 passed` | 2026-10-24 |
-| IPC 命令层单测（4 个） | ✅ 已验证 | `cargo test --bin mechrevo-max` → `4 passed`（锁中毒→restart 提示、撤销栈容错、EC 访问串行化） | 2026-10-24 |
+| IPC 命令层单测（7 个） | ✅ 已验证 | `cargo test --bin mechrevo-max` → `7 passed`（锁中毒→restart 提示、撤销栈容错、EC 访问串行化、`status_snapshot` 中毒路径、两条 undo 缺记录路径） | 2026-10-24 |
 | release 构建 | ✅ 已验证 | `cargo build --release` → 成功，exe 4 992 512 B（4.76 MiB），sha256 `aa4bcaaf…beae9cc9` | 2026-10-24 |
 | 推送 | ✅ 已验证 | `git push origin main` → `898c4c2..1fe2a14`；`git ls-remote origin refs/heads/main` = `1fe2a14` | 2026-10-24 |
 | Release 发布 | ✅ 已验证 | `tools/publish_release.py` 依次创建 v0.1.1（4 992 512 B）与 **v0.1.2**（**4 994 048 B**）；API 复核 v0.1.0/v0.1.1/v0.1.2 均 `draft=false`、asset 大小与本地构建一致，`releases/latest` = v0.1.2 | 2026-10-24 |
@@ -58,6 +58,8 @@
 | 可访问性 | ✅ 静态确认 | `:focus-visible` 覆盖按钮/滑块/tab；`role="status" aria-live` 状态栏；`role="alert"` 告警区；`prefers-reduced-motion` 降级 | 2026-10-24 |
 | 界面真实渲染（真机窗口） | ✅ 已验证 | 截图 `docs/screenshots/main.png`（显示真实 EC 数据，v0.1.0 时采集） | 2026-10-17 |
 | 界面渲染（浏览器替代验证） | ✅ 已验证 | `docs/screenshots/ui-ready.png`、`ui-ec-unavailable.png`、`ui-need-admin.png`；规格见 `docs/qa/ui-smoke-spec.md` | 2026-10-24 |
+| 命令执行线程 | ✅ 静态确认 + 合理推断 | 6 个命令改 `async fn` + `spawn_blocking`（默认 `ExecutionContext::Blocking` 会占 WebView2 UI 线程，官方 doc 有原文）；`cargo check --all-targets` 通过 | 2026-10-24 |
+| 覆盖率基线 | ✅ 已验证 | `cargo llvm-cov 0.9.1`：`core` 行覆盖 **86.56%**（排除 `ec/windows.rs` 后 97.1%）；Branches 列在 MSVC 下不可用 | 2026-10-24 |
 | CI（GitHub Actions） | ✅ 已验证 | run [40098051184](https://github.com/lza6/Mechrevo-Max/actions/runs/40098051184) → `conclusion=success`（约 240s），13 步全 success：core fmt/clippy(-D warnings)/test、app fmt/clippy/bin 单测/契约、node --check、合规自检。**不跑**真机测试与 GUI E2E | 2026-10-24 |
 | 独立复审（reviewer 子代理） | ✅ 已验证 | 独立跑 `core` 46 / `app` bin 4 / 契约 8 / 两个 crate 的 fmt+clippy；产出 4 条 Required Changes（R1 限速锁未覆盖 IOCTL、R2 限速状态实例级、R3 台账超范围、R4 注释矛盾），**已全部修复** | 2026-10-24 |
 | 前后端端到端（UI 自动化） | 🚫 禁用 | 见 `docs/SPEC.md` §5.1（避免反复启停驱动硬件） | — |

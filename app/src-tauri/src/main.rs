@@ -11,7 +11,7 @@ use mechrevo_core::{
     ModeChange, ModeController, OperatingMode, PowerController, PowerLimits, Sensors,
 };
 use serde::Serialize;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::State;
 
 /// 最近一次改动，用于一键撤销.
@@ -156,18 +156,19 @@ fn unavailable_with(
     }
 }
 
-/// 读取当前全部状态. EC 不可用时也返回结构化结果，不抛错让前端能渲染提示.
-#[tauri::command]
-fn get_status(state: State<'_, AppState>) -> StatusPayload {
+/// 读取当前全部状态（同步业务体，跑在 blocking 线程池上）.
+///
+/// EC 不可用时也返回结构化结果，不抛错，让前端能渲染可行动的提示.
+fn status_snapshot(state: &AppState) -> StatusPayload {
     // 串行化：轮询与用户操作不会同时进硬件
-    let _guard = match lock_ec(&state) {
+    let _guard = match lock_ec(state) {
         Ok(guard) => guard,
         Err((hint, message)) => {
-            let (can_undo_power, can_undo_mode) = undo_flags(&state);
+            let (can_undo_power, can_undo_mode) = undo_flags(state);
             return unavailable_with(hint, message, can_undo_power, can_undo_mode);
         }
     };
-    let (can_undo_power, can_undo_mode) = undo_flags(&state);
+    let (can_undo_power, can_undo_mode) = undo_flags(state);
 
     let ec = match open_ec() {
         Ok(ec) => ec,
@@ -213,12 +214,11 @@ fn get_status(state: State<'_, AppState>) -> StatusPayload {
     }
 }
 
-/// 以管理员身份重新启动本程序（当前进程随即退出）.
+/// 以管理员身份重新启动本程序（同步业务体；当前进程随即退出）.
 ///
 /// 用 PowerShell 的 `Start-Process -Verb RunAs` 触发 UAC，
 /// 避免依赖构建期嵌入的 manifest（本机 RC.EXE 在中文路径下会失败）.
-#[tauri::command]
-fn relaunch_elevated() -> Result<(), String> {
+fn relaunch_elevated_now() -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| format!("无法获取自身路径: {e}"))?;
     let exe_str = exe.to_string_lossy().replace('\'', "''");
 
@@ -235,13 +235,10 @@ fn relaunch_elevated() -> Result<(), String> {
     Err("提权启动被取消或失败".to_owned())
 }
 
-/// 切换运行档位.
-#[tauri::command]
-fn set_mode(state: State<'_, AppState>, mode: String) -> Result<String, String> {
-    let target = OperatingMode::from_key(&mode).ok_or_else(|| format!("未知档位: {mode}"))?;
-
+/// 切换运行档位（同步业务体）.
+fn switch_mode(state: &AppState, target: OperatingMode) -> Result<String, String> {
     // 持锁覆盖"打开 EC → 切换 → 记入撤销栈"的整个过程
-    let _guard = lock_ec(&state).map_err(|(_, message)| message)?;
+    let _guard = lock_ec(state).map_err(|(_, message)| message)?;
 
     let ec = open_ec().map_err(|e| e.to_string())?;
     let ctl = ModeController::new(&ec);
@@ -256,24 +253,15 @@ fn set_mode(state: State<'_, AppState>, mode: String) -> Result<String, String> 
     Ok(format!("已切换到{name}档"))
 }
 
-/// 设置某模式的默认功耗.
-#[tauri::command]
-fn set_power_limits(
-    state: State<'_, AppState>,
-    mode: String,
-    pl1: u8,
-    pl2: u8,
-    pl4: u8,
+/// 设置某模式的默认功耗（同步业务体）.
+fn apply_power_limits(
+    state: &AppState,
+    target: PowerMode,
+    limits: PowerLimits,
 ) -> Result<String, String> {
-    let target = match mode.as_str() {
-        "gaming" => PowerMode::Gaming,
-        "office" => PowerMode::Office,
-        other => return Err(format!("未知模式: {other}")),
-    };
+    let (pl1, pl2, pl4) = (limits.pl1, limits.pl2, limits.pl4);
 
-    let limits = PowerLimits::new(pl1, pl2, pl4).map_err(|e| e.to_string())?;
-
-    let _guard = lock_ec(&state).map_err(|(_, message)| message)?;
+    let _guard = lock_ec(state).map_err(|(_, message)| message)?;
 
     let ec = open_ec().map_err(|e| e.to_string())?;
     let ctl = PowerController::new(&ec);
@@ -299,11 +287,8 @@ fn set_power_limits(
 ///
 /// 只有**真正撤销成功**才把记录出栈：失败时记录保留，用户可以重试
 /// （此前是 `take()` 后直接撤销，失败即永久丢失回滚点）。
-#[tauri::command]
-fn undo_power(state: State<'_, AppState>) -> Result<String, String> {
-    let _guard = lock_ec(&state).map_err(|(_, message)| message)?;
-    let ec = open_ec().map_err(|e| e.to_string())?;
-
+fn undo_power_now(state: &AppState) -> Result<String, String> {
+    // 先判断有没有记录：没有就直接给准确文案，不必先打开设备
     let record = {
         let undo = state
             .undo
@@ -314,6 +299,9 @@ fn undo_power(state: State<'_, AppState>) -> Result<String, String> {
     let Some(record) = record else {
         return Err("没有可撤销的功耗改动".into());
     };
+
+    let _guard = lock_ec(state).map_err(|(_, message)| message)?;
+    let ec = open_ec().map_err(|e| e.to_string())?;
 
     let restored = record
         .undo(&ec)
@@ -328,11 +316,7 @@ fn undo_power(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 /// 撤销最近一次档位切换.
-#[tauri::command]
-fn undo_mode(state: State<'_, AppState>) -> Result<String, String> {
-    let _guard = lock_ec(&state).map_err(|(_, message)| message)?;
-    let ec = open_ec().map_err(|e| e.to_string())?;
-
+fn undo_mode_now(state: &AppState) -> Result<String, String> {
     let change = {
         let undo = state
             .undo
@@ -343,6 +327,9 @@ fn undo_mode(state: State<'_, AppState>) -> Result<String, String> {
     let Some(change) = change else {
         return Err("没有可撤销的档位切换".into());
     };
+
+    let _guard = lock_ec(state).map_err(|(_, message)| message)?;
+    let ec = open_ec().map_err(|e| e.to_string())?;
 
     let restored = change
         .undo(&ec)
@@ -356,11 +343,112 @@ fn undo_mode(state: State<'_, AppState>) -> Result<String, String> {
     Ok(format!("已还原 {restored} 个寄存器"))
 }
 
+// ============================================================
+// IPC 命令层
+//
+// 为什么全部是 `async fn` + `spawn_blocking`：
+// Tauri v2 的 `#[tauri::command]` **默认在 WebView2 的 UI（主）线程上同步执行**
+// （`tauri-macros` 的 wrapper 默认 `ExecutionContext::Blocking`，其阻塞分支不 spawn；
+// 官方 doc 原文："Runs the command on the async runtime instead of blocking the main thread …
+// this option is only needed for synchronous functions that should not run on the main thread"）。
+// 而 `get_status` 一轮约 14 次 IOCTL、受"两次访问不重叠"闸门约束 ≈ 280 ms；
+// 留在 UI 线程等于每 2 秒卡住窗口消息循环 280 ms（拖动/悬停/点击都会迟滞）。
+// 因此：命令本体只做参数解析，真正的 EC 工作交给 blocking 线程池。
+// 命令名与参数名保持不变，`ipc_contract.rs` 与前端 `IPC` 表无需改动。
+// ============================================================
+
+/// 共享状态的命令参数类型（`Arc` 是为了能搬进 `'static` 的 blocking 任务）。
+type SharedState<'a> = State<'a, Arc<AppState>>;
+
+/// 把后台任务失败转成用户可读文案.
+fn join_error(e: tauri::Error) -> String {
+    format!("内部任务异常（{e}），请重启本程序")
+}
+
+/// 读取当前全部状态.
+///
+/// 返回类型是 `Result`，但**永远返回 `Ok`**：EC 不可用属于正常业务状态，
+/// 会用结构化载荷（`ec.kind = "unavailable"` + `hint`）表达，不让前端收到
+/// rejection。改成 `Result` 只是因为"含引用的 async 命令必须返回 `Result`"
+/// （Tauri v2 的编译期约束），**前端看到的载荷形状与 v0.1.2 完全一致**。
+#[tauri::command]
+async fn get_status(state: SharedState<'_>) -> Result<StatusPayload, String> {
+    let worker_state = Arc::clone(state.inner());
+    let fallback_state = Arc::clone(state.inner());
+    let payload =
+        match tauri::async_runtime::spawn_blocking(move || status_snapshot(&worker_state)).await {
+            Ok(payload) => payload,
+            Err(e) => {
+                let (can_undo_power, can_undo_mode) = undo_flags(&fallback_state);
+                unavailable_with("restart", join_error(e), can_undo_power, can_undo_mode)
+            }
+        };
+    Ok(payload)
+}
+
+/// 切换运行档位.
+#[tauri::command]
+async fn set_mode(state: SharedState<'_>, mode: String) -> Result<String, String> {
+    let target = OperatingMode::from_key(&mode).ok_or_else(|| format!("未知档位: {mode}"))?;
+    let worker_state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || switch_mode(&worker_state, target))
+        .await
+        .map_err(join_error)?
+}
+
+/// 设置某模式的默认功耗.
+#[tauri::command]
+async fn set_power_limits(
+    state: SharedState<'_>,
+    mode: String,
+    pl1: u8,
+    pl2: u8,
+    pl4: u8,
+) -> Result<String, String> {
+    let target = match mode.as_str() {
+        "gaming" => PowerMode::Gaming,
+        "office" => PowerMode::Office,
+        other => return Err(format!("未知模式: {other}")),
+    };
+    let limits = PowerLimits::new(pl1, pl2, pl4).map_err(|e| e.to_string())?;
+
+    let worker_state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || apply_power_limits(&worker_state, target, limits))
+        .await
+        .map_err(join_error)?
+}
+
+/// 撤销最近一次功耗改动.
+#[tauri::command]
+async fn undo_power(state: SharedState<'_>) -> Result<String, String> {
+    let worker_state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || undo_power_now(&worker_state))
+        .await
+        .map_err(join_error)?
+}
+
+/// 撤销最近一次档位切换.
+#[tauri::command]
+async fn undo_mode(state: SharedState<'_>) -> Result<String, String> {
+    let worker_state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || undo_mode_now(&worker_state))
+        .await
+        .map_err(join_error)?
+}
+
+/// 以管理员身份重新启动本程序（当前进程随即退出）.
+#[tauri::command]
+async fn relaunch_elevated() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(relaunch_elevated_now)
+        .await
+        .map_err(join_error)?
+}
+
 fn main() {
     enable_dpi_awareness();
 
     tauri::Builder::default()
-        .manage(AppState::default())
+        .manage(Arc::new(AppState::default()))
         .setup(|app| {
             fit_window_to_monitor(app);
             Ok(())
@@ -513,5 +601,36 @@ mod tests {
             1,
             "临界区内同时出现多个访问者 —— EC 访问没有串行化"
         );
+    }
+
+    #[test]
+    fn status_snapshot_reports_restart_hint_when_ec_lock_poisoned() {
+        let state = AppState::default();
+        poison(&state.ec);
+
+        let payload = status_snapshot(&state);
+        match payload.ec {
+            EcStatus::Unavailable { hint, ref message } => {
+                assert_eq!(hint, "restart", "锁中毒应给 restart 提示");
+                assert!(message.contains("重启"), "文案应引导重启，实际: {message}");
+            }
+            EcStatus::Ready => panic!("锁中毒时不得报告 EC 可用"),
+        }
+        assert!(payload.project_id.is_none(), "不可用时不得给出任何读数");
+    }
+
+    #[test]
+    fn undo_power_without_record_reports_clear_error_before_touching_hardware() {
+        // 无记录时应先返回准确文案，而不是"EC 不可用"——也不需要真机
+        let state = AppState::default();
+        let err = undo_power_now(&state).unwrap_err();
+        assert!(err.contains("没有可撤销的功耗改动"), "实际: {err}");
+    }
+
+    #[test]
+    fn undo_mode_without_record_reports_clear_error_before_touching_hardware() {
+        let state = AppState::default();
+        let err = undo_mode_now(&state).unwrap_err();
+        assert!(err.contains("没有可撤销的档位切换"), "实际: {err}");
     }
 }

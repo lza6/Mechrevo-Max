@@ -15,7 +15,8 @@ reviewer 子代理独立验证后给出 **CONDITIONAL PASS**，指出 v0.1.1 两
 | R4 P2 | `mode.rs` 注释与实现矛盾 | 注释对齐 + 标注未验证 | `mode.rs` 注释 |
 
 验证：`core` 46 + doctest 1；`bin` 4；契约 8；两个 crate fmt/clippy 全绿；
-release exe 4 994 048 B（sha256 `c85a29ea…f33363`）。证据：`evidence/v0.1.2.json`。
+release exe 4 994 048 B（sha256 `c85a29ea…f33363`）。
+[Release v0.1.2](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.2) 已创建并核验（draft=false，asset 大小与本地一致）。证据：`evidence/v0.1.2.json`。
 
 ## 2026-10-24 · v0.1.1 护栏补丁
 

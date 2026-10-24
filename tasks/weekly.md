@@ -99,5 +99,10 @@ reviewer 子代理独立跑验证后给出 **CONDITIONAL PASS**，指出 v0.1.1 
 ### 验证（实际执行）
 `core` 46 passed + 1 doctest · `bin` 4 passed · 契约 8 passed · **两个 crate** 均 fmt 干净 + clippy 0 warning · release 构建成功（4 994 048 B，sha256 `c85a29ea…f33363`）
 
+### 发布（已完成）
+tag `v0.1.2` 已推送；[Release v0.1.2](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.2) 已创建并上传
+`mechrevo-max.exe`（4 994 048 B）。API 复核：v0.1.0 / v0.1.1 / v0.1.2 三项均 `draft=false`，
+asset 大小与各自本地构建一致，`latest` = v0.1.2。
+
 ### 未处理（已记入 known-issues P3-11/12/13）
 `get_status` ≈280ms 持锁（未测帧率）· 守卫 Drop 失败仅 stderr（release 无去处）· 契约参数名仍手写

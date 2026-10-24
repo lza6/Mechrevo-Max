@@ -50,7 +50,7 @@
 | IPC 命令层单测（4 个） | ✅ 已验证 | `cargo test --bin mechrevo-max` → `4 passed`（锁中毒→restart 提示、撤销栈容错、EC 访问串行化） | 2026-10-24 |
 | release 构建 | ✅ 已验证 | `cargo build --release` → 成功，exe 4 992 512 B（4.76 MiB），sha256 `aa4bcaaf…beae9cc9` | 2026-10-24 |
 | 推送 | ✅ 已验证 | `git push origin main` → `898c4c2..1fe2a14`；`git ls-remote origin refs/heads/main` = `1fe2a14` | 2026-10-24 |
-| Release 发布 | ✅ 已验证 | `tools/publish_release.py v0.1.1` → 创建成功并上传产物；API 复核 `draft=false`、asset `mechrevo-max.exe` **4 992 512 B**（与本地构建逐字节一致） | 2026-10-24 |
+| Release 发布 | ✅ 已验证 | `tools/publish_release.py` 依次创建 v0.1.1（4 992 512 B）与 **v0.1.2**（**4 994 048 B**）；API 复核 v0.1.0/v0.1.1/v0.1.2 均 `draft=false`、asset 大小与本地构建一致，`releases/latest` = v0.1.2 | 2026-10-24 |
 | 前端语法 | ✅ 已验证 | `node --check app/ui/app.js` → 通过 | 2026-10-24 |
 | 前端源码契约解析 | ✅ 已验证 | `frontend_source_ipc_table_matches_backend`：解析 `app.js` 的 `IPC` 表并与后端命令集双向比对；`no_raw_string_command_names_in_frontend` 禁止裸字符串命令名 | 2026-10-24 |
 | UI 元素 id 与 `ui` 映射一致性 | ✅ 静态确认 | 28 项逐一比对，全部匹配 | 2026-10-17 |

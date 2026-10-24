@@ -169,6 +169,14 @@
     "RestoreGuard 在 release 下 Drop 失败仅 eprintln!，无 stderr 去处（当前 app 未使用守卫，影响限真机测试）",
     "契约测试的参数名仍为手写表，源码解析只覆盖命令名",
     "覆盖率无工具、无基线",
-    "跨机型未验证；MSI/NSIS 安装包未构建"
-  ]
+    "MSI/NSIS 安装包仍未构建验证"
+  ],
+  "release": {
+    "tag": "v0.1.2",
+    "url": "https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.2",
+    "asset": "mechrevo-max.exe",
+    "asset_size_bytes": 4994048,
+    "verified_via": "GitHub API：releases 列表三项（v0.1.0/v0.1.1/v0.1.2）均 draft=false、asset 大小与本地构建一致；releases/latest = v0.1.2",
+    "verified_at": "2026-10-24T20:59:25+08:00"
+  }
 }

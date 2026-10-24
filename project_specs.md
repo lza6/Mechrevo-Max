@@ -19,7 +19,7 @@
 | 名称 | Mechrevo-Max（机械革命自研控制台） |
 | 形态 | Windows x64 桌面应用（Rust `mechrevo-core` + Tauri v2） |
 | 仓库 | https://github.com/lza6/Mechrevo-Max |
-| 当前版本 | v0.5.1（采样与降级修复；已创建 Release，CI 待核对） |
+| 当前版本 | v0.5.1（采样与降级修复；已发布，CI 三 job 全绿） |
 | 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0` ～ `v0.5.1` |
 | 规格基线 | `docs/SPEC.md`（安全红线在 §5.1） |
 
@@ -147,4 +147,4 @@
 | T-051-02 | 电池温度单位与 EC read_block 边界 | reviewer | P1 | **done** | 2982→25°C fixture；越界与上界单测通过 |
 | T-051-03 | 前端降级、危险确认、范围单一事实源、诊断字段 | 用户审计 | P1 | **done** | `tools/qa_browser.cjs` 21/21；取消不发 IPC、确认才发 |
 | T-051-04 | 历史文档纠偏、归档、技能/记忆补齐 | 用户审计 | P2 | **done** | 39 个已跟踪 md 审计；仅历史单轮审计备份归档，manifest 有回滚 |
-| T-051-05 | v0.5.1 构建、CI、Release | 用户授权发布 | P1 | **doing** | 本地构建哈希 `dc2c0330…0e56`；Release `draft=false`；CI 结果待回填 |
+| T-051-05 | v0.5.1 构建、CI、Release | 用户授权发布 | P1 | **done** | CI run 40133863688 三 job 全 success；Release `draft=false`，exe 5 395 456 B、MSI 2 088 960 B、NSIS 1 441 207 B 已上传 |

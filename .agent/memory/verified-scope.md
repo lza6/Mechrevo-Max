@@ -22,3 +22,4 @@
 | release 日志落盘 | 读 `%LOCALAPPDATA%\Mechrevo-Max\logs` | 有启动行 | 2026-10-24 |
 
 **未验证**：真机硬件写入与真实窗口外观（按安全策略不自动化）、长时 soak、干净机实装、多机型、app 新采样路径覆盖率；历史 core 覆盖率不是本轮重跑。
+| Release v0.5.1 | GitHub API | `draft=false`；exe 5 395 456 B、MSI 2 088 960 B、NSIS 1 441 207 B；CI run 40133863688 三 job success | 2026-10-25 |

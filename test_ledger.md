@@ -18,9 +18,9 @@
 | S6 | 撤销 ↔ 硬件状态 | `ModeChange::undo` / `ChangeRecord::undo` | EC 寄存器实际行为 | 撤销后寄存器回到快照值 | 2026-10-24（mock） | **pending**（"撤销后固件是否重新应用"未验证） | `switches_between_all_modes`（mock）；见 `ec-baseline.md` §6 |
 | S7 | 前端 DOM ↔ JS 映射 | `app/ui/index.html` 的 id | `app/ui/app.js` 的 `ui` 映射 | 当前 7 页 DOM id 与 ui 映射一致；缺失时首屏报错 | 2026-10-25 | **locked** | `tools/qa_browser.cjs` 21 断言 + `findMissingElements` 自检 |
 | S8 | 前端交互 ↔ 后端命令 | 按钮/滑块事件 | `invoke(IPC.xxx)` 调用与返回值 | 成功/失败/禁用/脏检查/危险确认状态正确 | 2026-10-25 | **locked** | `tools/qa_browser.cjs` 21 断言，含取消不发 IPC、确认才发 IPC |
-| S9 | 发布产物 ↔ 源码 | `tag` 指向的提交 | Release 上的 `mechrevo-max.exe` | 产物由该提交构建；大小/哈希可核对 | 2026-10-24 | **locked** | v0.1.2：4 994 048 B，sha256 `c85a29ea…f33363`；API 复核 asset 大小一致 |
+| S9 | 发布产物 ↔ 源码 | `tag` 指向的提交 | Release 上的 `mechrevo-max.exe` | 产物由该提交构建；大小/哈希可核对 | 2026-10-25 | **locked** | v0.5.1：exe 5 395 456 B，sha256 `dc2c0330…0e56`；CI package 成功并上传 msi/nsis |
+| S10 | 版本号 | `core/Cargo.toml` / `app/Cargo.toml` / `tauri.conf.json` | 发布 tag | 三处一致 + 与 tag 一致 | 2026-10-25 | **locked** | 三处均 0.5.1；tag v0.5.1；CI run 40133863688 全 success |
 | S11 | 命令执行线程 | `#[tauri::command]` 生成代码 | WebView2 UI 线程 + EC 互斥 | 阻塞 EC 操作在 blocking 池；外部采样不得持 EC 锁，也不得在 UI 线程执行 | 2026-10-25 | **locked** | `main.rs::status_snapshot` 锁外采样 + 独立 reviewer Approve + app 单测 |
-| S10 | 版本号 | `core/Cargo.toml` / `app/Cargo.toml` / `tauri.conf.json` | 发布 tag | 三处一致 + 与 tag 一致 | 2026-10-25 | **pending**（当前三处均为 0.5.1；待 v0.5.1 真实 Release 后 locked） | `docs/DEPLOYMENT.md` §7 |
 
 ## 2. Test Status
 

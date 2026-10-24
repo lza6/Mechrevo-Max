@@ -193,6 +193,38 @@
     "真实 GUI 与真实写入行为级验证受安全策略限制，本轮未执行",
     "外部查询超时注入测试未做；实现了有界超时和失败降级，未声称已测出超时行为",
     "0x751 当前为 0x00（强冷关），与早前 0x40 不同；不得继续宣称强冷为开",
-    "发布与 CI 尚未完成；本证据仅覆盖本地验证，后续另行核对 GitHub 结果"
-  ]
+    "干净机安装、真实 GUI、真机写入与多机型不在本轮验证范围；Release 可下载不等于这些路径已验证"
+  ],
+  "release": {
+    "tag": "v0.5.1",
+    "url": "https://github.com/lza6/Mechrevo-Max/releases/tag/v0.5.1",
+    "draft": false,
+    "verified_via": "GitHub API releases/tags/v0.5.1",
+    "assets": [
+      {
+        "name": "mechrevo-max.exe",
+        "size_bytes": 5395456,
+        "sha256": "dc2c0330c4f6e09e5a70e1917d4ae21d15381afb6973b2a3446ea8c6e2970e56"
+      },
+      {
+        "name": "Mechrevo-Max_0.5.1_x64_en-US.msi",
+        "size_bytes": 2088960
+      },
+      {
+        "name": "Mechrevo-Max_0.5.1_x64-setup.exe",
+        "size_bytes": 1441207
+      }
+    ]
+  },
+  "ci": {
+    "run_id": 40133863688,
+    "head_sha": "c40616c",
+    "conclusion": "success",
+    "jobs": [
+      "build · test · lint → success",
+      "coverage（core，仅上报）→ success",
+      "打包冒烟（msi/nsis）→ success"
+    ],
+    "verified_at": "2026-10-25T05:10:00+08:00"
+  }
 }

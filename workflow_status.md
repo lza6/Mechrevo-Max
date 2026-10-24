@@ -473,3 +473,12 @@ Office: PowerLimits { pl1: 45, pl2: 45, pl4: 200 }
 - commit：`c40616c`；tag：`v0.5.1`；已推送。
 - [Release v0.5.1](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.5.1)：API 返回 `draft=false`，`mechrevo-max.exe` **5,395,456 B**，与本地 SHA256 `dc2c0330…0e56` 对应。
 - CI：已启动，等待三个 job 真实完成；package 产物随后上传，未上传前不宣称完整发布。
+
+### CI 与完整 Release（已完成）
+
+- [CI run 40133863688](https://github.com/lza6/Mechrevo-Max/actions/runs/40133863688)：**build · test · lint、coverage、package 全部 success**。
+- Release API 复核三资产：`mechrevo-max.exe` 5,395,456 B、`Mechrevo-Max_0.5.1_x64_en-US.msi` 2,088,960 B、`Mechrevo-Max_0.5.1_x64-setup.exe` 1,441,207 B。
+- `main` 已推送；`v0.5.1` tag 已推送；没有 force push。
+- 结论：A-04 done（构建/CI/Release）；干净系统安装仍不属于本次 CI 覆盖，保留为独立未验证项。
+- 本轮可以停止的条件：P0/P1 修复并复核、测试/契约/浏览器验证、独立 Approve、文档与记忆同步、CI 与 Release 完成。
+

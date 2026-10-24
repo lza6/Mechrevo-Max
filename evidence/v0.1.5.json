@@ -1,0 +1,61 @@
+{
+  "task_id": "v0.1.5",
+  "status": "passed",
+  "timestamp": "2026-10-24T23:35:00+08:00",
+  "scope": "修复打包配置：bundle.icon 从未包含 icon.ico，导致 `npx tauri build` 必然失败。修后由 CI 真实构建出 msi 与 nsis，并作为 Release 资产上传",
+  "root_cause": "`tauri.conf.json` 的 `bundle.icon` 只有 32x32.png 与 icon.png；Windows 打包必须要有 .ico → `failed to bundle project: Couldn't find a .ico icon`。这解释了 P2-08「MSI/NSIS 从未构建验证」：不是没时间验证，是配置根本不可能成功",
+  "commands_executed": [
+    {
+      "cmd": "GitHub Actions run 40101336441（v0.1.4 tag）→ package job",
+      "exit_code": 1,
+      "raw_output_tail": "failed to bundle project: `Couldn't find a .ico icon`\n       Error failed to bundle project: `Couldn't find a .ico icon`\n##[error]Process completed with exit code 1."
+    },
+    {
+      "cmd": "修复后 cd app/src-tauri && cargo test --offline --bin mechrevo-max && cargo build --release --offline",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 12 passed; 0 failed\n   Compiling mechrevo-max v0.1.5 (...)\n    Finished `release` profile [optimized] target(s) in 1m 04s\n553b9672a3e06b400f3d03f3efd0f1318d8a9dd5bfaedcbd02ac325dc44db7b8  5129728"
+    },
+    {
+      "cmd": "GitHub Actions run 40101956611（v0.1.5 tag）→ 三个 job",
+      "exit_code": 0,
+      "raw_output_tail": "RUN c408c91 success\nJOB 打包冒烟（msi/nsis） → success\nJOB build · test · lint → success\nJOB coverage（core，仅上报） → success\n产物：app/src-tauri/target/release/bundle/msi/Mechrevo-Max_0.1.5_x64_en-US.msi  1990656 bytes\n      app/src-tauri/target/release/bundle/nsis/Mechrevo-Max_0.1.5_x64-setup.exe  1362587 bytes\nartifact mechrevo-max-installers 3134024 bytes"
+    },
+    {
+      "cmd": "下载 CI artifact 并上传到 Release v0.1.5",
+      "exit_code": 0,
+      "raw_output_tail": "zip 内产物: ['msi/Mechrevo-Max_0.1.5_x64_en-US.msi', 'nsis/Mechrevo-Max_0.1.5_x64-setup.exe']\n上传成功: Mechrevo-Max_0.1.5_x64_en-US.msi 1990656 bytes\n上传成功: Mechrevo-Max_0.1.5_x64-setup.exe 1362587 bytes"
+    }
+  ],
+  "files_changed": [
+    "app/src-tauri/tauri.conf.json（bundle.icon 补 icon128.png/icon256.png/icon.ico；version 0.1.5）",
+    "core/Cargo.toml、app/src-tauri/Cargo.toml（版本 0.1.5）",
+    "docs/DEPLOYMENT.md（§2.2 升级为「文件必须存在 且 必须列进 bundle.icon」；发布清单加「package job 必须成功」）",
+    ".agent/memory/known-issues.md（P2-08 定位）",
+    "CHANGELOG.md（0.1.5 段）"
+  ],
+  "artifacts": {
+    "exe": { "name": "mechrevo-max.exe", "size_bytes": 5129728, "sha256": "553b9672a3e06b400f3d03f3efd0f1318d8a9dd5bfaedcbd02ac325dc44db7b8" },
+    "msi": { "name": "Mechrevo-Max_0.1.5_x64_en-US.msi", "size_bytes": 1990656, "source": "CI run 40101956611, package job" },
+    "nsis": { "name": "Mechrevo-Max_0.1.5_x64-setup.exe", "size_bytes": 1362587, "source": "CI run 40101956611, package job" }
+  },
+  "release": {
+    "tag": "v0.1.5",
+    "url": "https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.5",
+    "assets": ["mechrevo-max.exe", "Mechrevo-Max_0.1.5_x64_en-US.msi", "Mechrevo-Max_0.1.5_x64-setup.exe"],
+    "verified_at": "2026-10-24T23:35:00+08:00"
+  },
+  "ci": { "run_id": 40101956611, "head_sha": "c408c91", "conclusion": "success", "jobs": ["build · test · lint → success", "coverage（core，仅上报）→ success", "打包冒烟（msi/nsis）→ success"] },
+  "tests": [
+    { "name": "IPC 命令层单测", "type": "unit", "status": "passed", "evidence": "12 passed" },
+    { "name": "CI verify job（fmt/clippy/test/契约/node/合规）", "type": "integration", "status": "passed", "evidence": "run 40101956611 success" },
+    { "name": "CI coverage job", "type": "lint", "status": "passed", "evidence": "success（core，忽略 ec/windows.rs）" },
+    { "name": "CI package job（msi + nsis）", "type": "build", "status": "passed", "evidence": "两个安装包生成并上传 artifact" },
+    { "name": "安装包在干净机器实装", "type": "manual", "status": "blocked", "evidence": "需真机/虚拟机；且安装涉及系统写入，按用户既有安全指示不在本机执行" }
+  ],
+  "limitations": [
+    "安装包只验证到「能构建 + 能被 Actions 上传」，**没有在干净系统上真正安装运行过**（需用户在场或虚拟机）",
+    "msi 语言为 en-US（默认），未做中文本地化",
+    "v0.1.5 未重新跑浏览器 47 条断言（前端零改动），沿用 v0.1.4 结果",
+    "覆盖率沿用 2026-10-24 基线，未重跑"
+  ]
+}

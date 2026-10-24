@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-10-24（收尾）· v0.1.4 + v0.1.5
+
+### v0.1.4（可观测性 / 离线 / 可访问性）
+- **N1 日志落盘 + panic hook**：`%LOCALAPPDATA%\Mechrevo-Max\logs`，按天滚动/7 天/5MB 上限/失败静默；
+  `RestoreGuard` 回滚失败改走 `log::error` 双写
+- **失败原因常驻界面**：`last_error` 记录/清空/回放（不用一次性 emit），前端新增常驻错误条
+- **N2 离线可用**：`webviewInstallMode = skip`
+- **N3 可访问性 4 处**：label for / aria-valuetext / 常驻 live 区 / tabs role
+- **CI 硬化**：rust-cache、最小权限、concurrency、coverage job、package job、固定 1.95.0
+- 验证：core 46+1、bin 12、契约 8、前端 **47/47**、两 crate clippy 0、release 5 129 216 B
+
+### v0.1.5（打包修复 —— CI 一跑就露馅）
+- `package` job 首跑即失败：`Couldn't find a .ico icon` → `bundle.icon` **从未包含 `icon.ico`**
+- 即 P2-08「MSI/NSIS 从未构建验证」的真实原因：**配置根本不可能打包成功**
+- 修后 CI run 40101956611 三 job 全 success：msi 1 990 656 B + nsis 1 362 587 B，已上传 Release v0.1.5
+
+---
+
+
 ## 2026-10-24（下半场）· v0.1.1 护栏补丁落地
 
 ### 完成（全部离线可验，零硬件风险）

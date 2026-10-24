@@ -19,7 +19,7 @@
 | 名称 | Mechrevo-Max（机械革命自研控制台） |
 | 形态 | Windows x64 桌面应用（Rust `mechrevo-core` + Tauri v2） |
 | 仓库 | https://github.com/lza6/Mechrevo-Max |
-| 当前版本 | v0.1.4（护栏 + 复审修复 + 执行线程修正 + 可观测性/离线/可访问性，已发布） |
+| 当前版本 | v0.1.5（护栏 + 复审修复 + 执行线程 + 可观测性/离线/可访问性 + 安装包可构建，已发布） |
 | 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0`、`v0.1.1`、`v0.1.2` |
 | 规格基线 | `docs/SPEC.md`（安全红线在 §5.1） |
 
@@ -72,6 +72,8 @@
 | T-020-05 | release 下日志落盘 + panic hook + 失败常驻（调研 N1） | N1 | **P1** | **done** | `app/src-tauri/src/logging.rs`（按天滚动/保留 7 天/5MB 上限/失败静默）+ panic hook + `last_error` 回放；bin 单测 7→12 |
 | T-020-06 | WebView2 安装模式改 skip（调研 N2） | N2 | P2 | **done** | 默认 `DownloadBootstrapper` 需联网，离线机器装不上 |
 | T-020-07 | a11y 4 处修正（label/aria-valuetext/alert 常驻/tabs role） | N3 | P2 | **done** | 47 条浏览器断言含 6 条可访问性；真机读屏播报仍待验证 |
+| T-020-08 | 修 `bundle.icon` 缺 `.ico`，让 msi/nsis 真能构建（关闭 P2-08） | P2-08 | P2 | **done** | CI run 40101956611 package job success；msi 1 990 656 B + nsis 1 362 587 B，已上传 Release |
+| T-020-09 | CI 三 job（verify/coverage/package）+ rust-cache + 固定工具链 | P2-02 | P2 | **done** | run 40101956611 三个 job 全 success |
 
 ---
 

@@ -65,7 +65,7 @@
 <div class="wrap">
 
 <header>
-  <div class="kicker">变更报告 · v0.1.0 → v0.1.2（含独立复审修复）</div>
+  <div class="kicker">变更报告 · v0.1.0 → v0.1.2 + 第三轮工程化验证</div>
   <h1>护栏补丁：让"已验证"这件事本身变得可验证</h1>
   <p class="sub">Mechrevo-Max · 机械革命自研控制台 · 2026-10-24 · 仅离线可验改动，零硬件风险</p>
 </header>
@@ -305,8 +305,63 @@ fn run_never_allows_overlapping_access() {
   </tbody>
 </table>
 
+
+<h2>10. 第三轮：把"用户点一遍"这件事真的跑了一遍（零硬件）</h2>
+<p>到此为止，最大的空白是：<strong>没有人验证过界面上点下去会发生什么</strong>。真机 UI 自动化被明令禁止
+（反复启停应用会驱动硬件），所以此前只有一张 v0.1.0 的静态截图。</p>
+<p>解法：把前端单独拿出来，用 <strong>Playwright(Chromium)</strong> 打开 <code>app/ui/index.html</code>，
+在页面脚本执行之前注入假的 <code>window.__TAURI__.core.invoke</code>，用 5 个场景驱动全部状态。</p>
+
+<div class="cards">
+  <div class="card"><div class="num">37/37</div><div class="lbl">前端断言通过</div></div>
+  <div class="card"><div class="num">0</div><div class="lbl">pageerror / console.error</div></div>
+  <div class="card"><div class="num">4</div><div class="lbl">覆盖的后端状态</div></div>
+  <div class="card"><div class="num">3</div><div class="lbl">新增截图证据</div></div>
+</div>
+
+<h3>覆盖了什么</h3>
+<table>
+  <thead><tr><th>场景</th><th>断言要点</th></tr></thead>
+  <tbody>
+    <tr><td>EC 可用</td><td>读数（3970 / 75 RPM）、供电「适配器 + 编码 7」、原始寄存器 <code>751=0x00 · 7AB=0x00</code>、均衡档高亮、滑块回填、未修改时「应用」禁用、撤销按钮跟随 <code>can_undo_*</code></td></tr>
+    <tr><td>驱动未就绪</td><td>顶栏转红、告警出现、显示 <code>sc start</code> + <code>pnputil</code> 修复命令、<strong>不</strong>显示提权按钮、读数降级为 —、全部按钮禁用</td></tr>
+    <tr><td>权限不足</td><td>标题「需要管理员权限」、出现一键提权重启、隐藏驱动命令</td></tr>
+    <tr><td>锁中毒（v0.1.1 新增）</td><td>标题「需要重启程序」、出现重启按钮、<strong>不</strong>误导用户去跑驱动命令</td></tr>
+    <tr><td>交互全链路</td><td>滑块 → 脏标记 → 重置 → 应用（校验 <code>set_power_limits</code> 收到 camelCase 的 <code>{mode,pl1,pl2,pl4}</code>）→ 切档（<code>set_mode</code> 只收 <code>{mode}</code>）→ 撤销</td></tr>
+    <tr><td>轮询生命周期</td><td>busy 期间 2000ms 定时器<strong>从注册表移除</strong>；结束后恢复且<strong>只有一个</strong>（无泄漏）</td></tr>
+    <tr><td>未知档位编码</td><td><code>mode=null</code> 时<strong>不高亮任何档位</strong> —— 不猜编码</td></tr>
+  </tbody>
+</table>
+
+<div class="note"><strong>踩坑记录（值得单独记住）：</strong>脚手架第一版跑出 <strong>11 条红色失败</strong>，
+看起来像"驱动缺失时界面没更新"。排查后发现是脚手架的问题：<code>page.goto(同一 URL + 不同 hash)</code>
+<strong>不会重载文档</strong>，页面还停在上一个 ready 场景。改成「先 <code>about:blank</code> 再带唯一
+<code>?run=N</code> 打开」后 37/37 全绿。
+教训：<strong>看到红色先怀疑脚手架，再怀疑应用</strong>——否则就会去"修"一个不存在的 bug。
+这条已写进 <code>docs/qa/ui-smoke-spec.md</code>。</div>
+
+<h3>CI：从"人工清单"变成"机器门禁"</h3>
+<p><code>docs/DEPLOYMENT.md</code> §7 那 10 条发布检查此前全靠人跑，而它已经被证明会漂移
+（台账曾把只跑过 <code>core</code> 的 clippy 记成无条件通过）。现在有 <code>.github/workflows/ci.yml</code>：</p>
+<pre><code>core fmt → core clippy -D warnings → core test(46+doctest)
+app  fmt → app  clippy -D warnings → app bin 单测(4) → app 契约(8)
+node --check app/ui/app.js
+合规自检：git ls-files | grep -Ei '\.(sys|msix|msixbundle|dll|exe)$'  必须为空</code></pre>
+<div class="note ok"><strong>已验证（不是"文件存在"）：</strong>
+run <a href="https://github.com/lza6/Mechrevo-Max/actions/runs/40098051184">40098051184</a> 在
+<code>windows-latest</code> 上 <code>conclusion=success</code>，13 个步骤全部 success，耗时约 240 秒。</div>
+<p>CI 刻意<strong>不跑</strong>：真机测试（无硬件且违反安全红线）、GUI E2E（用户禁用）、覆盖率门禁（无基线）。</p>
+
+<h3>本轮新增的判断题（自测 4/4）</h3>
+<ol>
+  <li>浏览器 + mock 后端验证通过，就说明真机链路也通了。<details><summary>答案</summary><p><strong>错。</strong>它只证明 DOM 契约、状态渲染、IPC 参数形状正确；真实 Tauri 窗口、真实 invoke、WebView2 渲染与 DPI 表现都未覆盖。</p></details></li>
+  <li>CI 里应该把 <code>core/tests/hardware.rs</code> 的 <code>#[ignore]</code> 去掉，让 CI 顺便验证硬件。<details><summary>答案</summary><p><strong>错。</strong>CI 无硬件；且真机写入有硬复位风险（2026-10-17 已发生过一次），必须保持 <code>ignored</code>。</p></details></li>
+  <li>测试跑出一堆红色时，第一步应该去改业务代码。<details><summary>答案</summary><p><strong>错。</strong>先验证脚手架（本轮 11 条红全是"同 URL 改 hash 不重载"造成的假象）。</p></details></li>
+  <li>"轮询是否停了"这个断言，数 <code>invoke('get_status')</code> 的次数是可靠办法。<details><summary>答案</summary><p><strong>不可靠。</strong>动作结束后的延迟强制刷新会多出一次调用；应直接观察 <code>setInterval</code> 注册表。</p></details></li>
+</ol>
+
 <footer>
-  生成时间 2026-10-24 · 数据来自 <code>evidence/v0.1.1.json</code> 与 <code>evidence/v0.1.2.json</code> 的真实命令输出 ·
+  生成时间 2026-10-24 · 数据来自 <code>evidence/v0.1.1.json</code>、<code>evidence/v0.1.2.json</code>、<code>evidence/qa-round3.json</code> 的真实命令输出 ·
   计划与问题清单见 <code>docs/计划书/下一步改进指南.md</code> · 规则见 <code>AGENTS.md</code>
 </footer>
 

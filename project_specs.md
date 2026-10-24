@@ -66,7 +66,7 @@
 | T-011-18 | `mode.rs` 注释与实现对齐（复审 R4） | R4 | P2 | **done** | 注释改为"撤销只回写字段，是否需补提交未验证" |
 | T-020-00 | 补齐执行骨架 `policy.md` / `test_ledger.md` | — | P1 | **done** | 门禁数值按项目实际填写；接缝登记 10 条 |
 | T-020-01 | 前端冒烟：浏览器 + mock 后端（替代被禁的真机 E2E） | P2-02 相关 | P1 | **done** | 37/37 断言通过；`docs/qa/ui-smoke-spec.md` + 3 张截图 |
-| T-020-02 | 建 CI（GitHub Actions）并核对真实运行结果 | P2-02 | P2 | **doing** | `.github/workflows/ci.yml`；运行结论待 push 后核对 |
+| T-020-02 | 建 CI（GitHub Actions）并核对真实运行结果 | P2-02 | P2 | **done** | run 40098051184 → conclusion=success，13 步全 success（约 240s） |
 
 ---
 

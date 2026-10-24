@@ -1,0 +1,77 @@
+{
+  "task_id": "qa-round3",
+  "status": "passed",
+  "timestamp": "2026-10-24T21:35:00+08:00",
+  "scope": "第 3 轮：补齐执行骨架（policy/test_ledger）+ 前端浏览器真实渲染与交互验证（替代被禁的真机 E2E）+ CI 落地并核对真实运行结论。无业务代码改动。",
+  "code_changes": "无（未修改 core/、app/ 下任何代码文件；37 条前端断言全绿，未发现缺陷）",
+  "commands_executed": [
+    {
+      "cmd": "Playwright(Chromium) 打开 app/ui/index.html + 注入假 window.__TAURI__.core.invoke，跑 37 条 DOM/交互断言（5 个场景 + 1 个未知编码场景）",
+      "exit_code": 0,
+      "raw_output_tail": "{\"summary\":{\"total\":37,\"passed\":37,\"failed\":[]}}  附带 errors=[]（pageerror 0 条、console.error 0 条）。截图：docs/screenshots/ui-ready.png、ui-ec-unavailable.png、ui-need-admin.png"
+    },
+    {
+      "cmd": "Playwright 首轮（脚手架 v1，同 URL 改 hash 切换场景）",
+      "exit_code": 1,
+      "raw_output_tail": "{\"summary\":{\"total\":37,\"passed\":26,\"failed\":[11 条，例如 'driver: 顶栏未连接 :: EC 已连接'、'driver: 读数降级为 — :: 3970/75/适配器']}}  —— 排查结论：同 URL 仅改 hash 不触发文档重载，页面停在上一个 ready 场景；属脚手架缺陷，非应用缺陷。修正后 37/37 通过。"
+    },
+    {
+      "cmd": "git push origin main（e676780）",
+      "exit_code": 0,
+      "raw_output_tail": "To https://github.com/lza6/Mechrevo-Max.git\n   6342fab..e676780  main -> main"
+    },
+    {
+      "cmd": "GitHub Actions：CI / build · test · lint（run 40098051184，windows-latest）",
+      "exit_code": 0,
+      "raw_output_tail": "status=completed conclusion=success（约 240s）\n步骤：Set up job success / checkout success / Install Rust success / Cache cargo success / core fmt success / core clippy(0 warning 门槛) success / core test(46+demo) success / app fmt success / app clippy(0 warning 门槛) success / app IPC 命令层单测 success / app 前后端契约 success / 前端语法 success / 合规自检 success / Complete job success\nURL: https://github.com/lza6/Mechrevo-Max/actions/runs/40098051184"
+    }
+  ],
+  "files_added": [
+    "policy.md（执行骨架：门禁数值按项目实际，含不适项明确排除）",
+    "test_ledger.md（10 条接缝登记 + 测试状态 + 改动→复测映射）",
+    ".github/workflows/ci.yml（CI：fmt/clippy/单测/契约/node --check/合规自检）",
+    "docs/qa/ui-smoke-spec.md（37 条断言规格 + 复跑要点 + 审查边界）",
+    "docs/screenshots/ui-ready.png",
+    "docs/screenshots/ui-ec-unavailable.png",
+    "docs/screenshots/ui-need-admin.png"
+  ],
+  "tests": [
+    { "name": "前端渲染与交互（浏览器 + mock 后端）", "type": "e2e", "status": "passed", "evidence": "37/37 断言；pageerror 0；console.error 0" },
+    { "name": "CI 全流程", "type": "integration", "status": "passed", "evidence": "run 40098051184 → conclusion=success，13 步全 success" },
+    { "name": "真机硬件测试（7 个 #[ignore]）", "type": "integration", "status": "skipped", "evidence": "按 docs/SPEC.md §5.1 与用户指示不执行" },
+    { "name": "真实窗口 GUI E2E", "type": "e2e", "status": "blocked", "evidence": "用户 2026-10-17 明确禁用；已用浏览器 + mock 后端替代并标注边界" },
+    { "name": "覆盖率", "type": "coverage", "status": "blocked", "evidence": "无 cargo-llvm-cov，无基线；CI 未设覆盖率门禁" }
+  ],
+  "mock_scenarios_covered": [
+    "ec_ready（正常读数与可操作态）",
+    "driver_missing（驱动未就绪 → 修复命令）",
+    "elevation_required（权限不足 → 一键提权）",
+    "lock_poison_restart（内部状态异常 → 重启提示，不误导显示驱动命令）",
+    "unknown_mode_encoding（mode=null 时不高亮任何档位，不猜测）",
+    "slow_backend（切档 600ms，验证 busy 期间轮询定时器被清除、结束后唯一恢复）"
+  ],
+  "browser_validation": {
+    "performed": true,
+    "engine": "Playwright / Chromium（MCP）",
+    "paths": [
+      "ready 状态下渲染真实读数与档位高亮",
+      "驱动缺失告警与修复命令块",
+      "权限不足一键提权",
+      "锁中毒重启提示",
+      "滑块脏检查 → 重置 → 应用 → 切档 → 撤销 全链路",
+      "轮询定时器：busy 清除、结束恢复且唯一"
+    ],
+    "screenshots": [
+      "docs/screenshots/ui-ready.png",
+      "docs/screenshots/ui-ec-unavailable.png",
+      "docs/screenshots/ui-need-admin.png"
+    ]
+  },
+  "limitations": [
+    "浏览器 + mock 后端只证明前端 DOM/交互/参数形状正确，**不证明**真实 Tauri 窗口、真实 invoke 通道、WebView2 渲染差异与 DPI 表现",
+    "真实窗口 GUI E2E 仍被用户禁令阻断（反复启停应用会驱动硬件）",
+    "真机硬件链路（写后读回语义、撤销后固件是否重应用）仍为 pending，见 test_ledger.md S4/S6",
+    "冒烟不可一条命令复跑（仓库刻意不引入 package.json/playwright，保持前端无构建步骤）",
+    "覆盖率仍无基线"
+  ]
+}

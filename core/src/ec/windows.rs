@@ -16,6 +16,7 @@ use crate::error::{Error, Result};
 #[cfg(windows)]
 mod imp {
     use super::{EcTransport, Error, IOCTL_EC_READ, IOCTL_EC_WRITE, Result};
+    use crate::ec::AccessThrottle;
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::{
@@ -27,10 +28,14 @@ mod imp {
     use windows_sys::Win32::System::IO::DeviceIoControl;
 
     /// 真机传输层.
-    #[derive(Debug, Clone)]
+    ///
+    /// 内部持有 [`AccessThrottle`]: 每次 IOCTL 前都会补齐最小访问间隔,
+    /// 因此"限速"对调用方不可绕过 (见 `docs/SPEC.md` §5.1).
+    #[derive(Debug)]
     pub struct WindowsAcpiTransport {
         path: String,
         wide_path: Vec<u16>,
+        throttle: AccessThrottle,
     }
 
     impl WindowsAcpiTransport {
@@ -55,13 +60,30 @@ mod imp {
             Ok(Self {
                 path: path.to_owned(),
                 wide_path,
+                throttle: AccessThrottle::new(),
             })
+        }
+
+        /// 用自定义最小访问间隔构造 (低于硬下限会被夹回).
+        ///
+        /// # Errors
+        /// 路径为空时返回错误.
+        pub fn with_throttle(path: &str, min_interval: std::time::Duration) -> Result<Self> {
+            let mut transport = Self::with_path(path)?;
+            transport.throttle = AccessThrottle::with_min_interval(min_interval);
+            Ok(transport)
         }
 
         /// 设备路径.
         #[must_use]
         pub fn path(&self) -> &str {
             &self.path
+        }
+
+        /// 当前生效的最小访问间隔.
+        #[must_use]
+        pub fn min_interval(&self) -> std::time::Duration {
+            self.throttle.min_interval()
         }
 
         /// 探测设备是否可用 (打开一次句柄).
@@ -110,6 +132,9 @@ mod imp {
 
         /// 发起一次 IOCTL.
         fn ioctl(&self, code: u32, input: &[u8], out_len: usize) -> Result<Vec<u8>> {
+            // 唯一的真实硬件出口 —— 限速在这里强制执行, 调用方无法绕过.
+            self.throttle.wait();
+
             let handle = self.open()?;
             let mut output = vec![0u8; out_len];
             let mut returned: u32 = 0;

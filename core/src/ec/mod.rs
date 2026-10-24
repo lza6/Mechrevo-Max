@@ -9,9 +9,11 @@
 //! - 所有写入默认执行「读回校验」, 校验失败即报错, 绝不静默通过.
 //! - 提供 [`Ec::snapshot`] / [`Ec::restore`] 实现"写入前先存回滚点"的纪律.
 
+mod throttle;
 mod transport;
 mod windows;
 
+pub use throttle::{AccessThrottle, DEFAULT_MIN_INTERVAL, HARD_MIN_INTERVAL};
 pub use transport::{EcTransport, MockTransport};
 pub use windows::WindowsAcpiTransport;
 
@@ -174,6 +176,69 @@ impl<T: EcTransport> Ec<T> {
         }
         Ok(ok)
     }
+
+    /// 为回滚点创建一个 RAII 守卫.
+    ///
+    /// 守卫离开作用域时 **无条件** 还原 —— 包括断言 panic 展开的路径.
+    /// Rust 没有 `finally`, 少了这一步, "写入 → 断言失败" 就会把硬件
+    /// 停在改动后的状态.
+    ///
+    /// 主动回滚请调用 [`RestoreGuard::restore_now`], 之后守卫自动解除;
+    /// 若已用别的方式回滚完, 调用 [`RestoreGuard::disarm`] 避免重复写入.
+    #[must_use]
+    pub fn guard(&self, point: RollbackPoint) -> RestoreGuard<'_, T> {
+        RestoreGuard {
+            ec: self,
+            point: Some(point),
+        }
+    }
+}
+
+/// 回滚守卫 —— 离开作用域时自动 `restore`.
+///
+/// 主要服务于"会写真实硬件"的路径 (尤其 `core/tests/hardware.rs`):
+/// 断言失败时进程会 panic 展开, 普通语句被跳过, 只有 `Drop` 仍会执行.
+///
+/// `Drop` 里的失败无法向上传播, 因此只用 `eprintln!` 告知; 需要拿到错误的
+/// 调用方应改用 [`RestoreGuard::restore_now`].
+pub struct RestoreGuard<'a, T: EcTransport> {
+    ec: &'a Ec<T>,
+    point: Option<RollbackPoint>,
+}
+
+impl<T: EcTransport> RestoreGuard<'_, T> {
+    /// 解除守卫 —— 回滚已经完成, 不需要再还原一次.
+    pub fn disarm(&mut self) {
+        self.point = None;
+    }
+
+    /// 守卫当前持有的回滚点 (解除后为 `None`).
+    #[must_use]
+    pub fn point(&self) -> Option<&RollbackPoint> {
+        self.point.as_ref()
+    }
+
+    /// 立即还原并解除守卫.
+    ///
+    /// # Errors
+    /// 写回失败时返回错误; 无论成败守卫都会解除, 不会在 `Drop` 时重试.
+    pub fn restore_now(&mut self) -> Result<usize> {
+        match self.point.take() {
+            Some(point) => self.ec.restore(&point),
+            None => Ok(0),
+        }
+    }
+}
+
+impl<T: EcTransport> Drop for RestoreGuard<'_, T> {
+    fn drop(&mut self) {
+        if let Some(point) = self.point.take() {
+            match self.ec.restore(&point) {
+                Ok(n) => eprintln!("[ec-guard] 已自动回滚 {n} 个寄存器"),
+                Err(e) => eprintln!("[ec-guard] ⚠️ 自动回滚失败, 硬件可能停在中间状态: {e}"),
+            }
+        }
+    }
 }
 
 /// 当前 Unix 时间戳 (秒).
@@ -271,5 +336,76 @@ mod tests {
         let t = MockTransport::new().with_failing_read(0x0731);
         let ec = Ec::new(t);
         assert!(ec.snapshot(&[0x0730, 0x0731], "应当失败").is_err());
+    }
+
+    #[test]
+    fn guard_restores_when_dropped() {
+        let t = MockTransport::new();
+        t.seed(0x0730, 75);
+        let ec = Ec::new(t);
+
+        let point = ec.snapshot(&[0x0730], "guard 测试").unwrap();
+        {
+            let _guard = ec.guard(point);
+            ec.write_verified(0x0730, 45).unwrap();
+            assert_eq!(ec.read(0x0730).unwrap(), 45);
+        }
+        assert_eq!(ec.read(0x0730).unwrap(), 75, "守卫离开作用域后必须自动还原");
+    }
+
+    #[test]
+    fn guard_does_not_restore_after_disarm() {
+        let t = MockTransport::new();
+        t.seed(0x0730, 75);
+        let ec = Ec::new(t);
+
+        let point = ec.snapshot(&[0x0730], "disarm 测试").unwrap();
+        {
+            let mut guard = ec.guard(point);
+            guard.disarm();
+            ec.write_verified(0x0730, 60).unwrap();
+        }
+        assert_eq!(ec.read(0x0730).unwrap(), 60, "解除守卫后不应再还原");
+    }
+
+    #[test]
+    fn guard_restore_now_returns_count_and_disarms() {
+        let t = MockTransport::new();
+        t.seed(0x0730, 75);
+        t.seed(0x0731, 80);
+        let ec = Ec::new(t);
+
+        let point = ec.snapshot(&[0x0730, 0x0731], "restore_now").unwrap();
+        let mut guard = ec.guard(point);
+        ec.write_verified(0x0730, 10).unwrap();
+        ec.write_verified(0x0731, 11).unwrap();
+
+        let restored = guard.restore_now().unwrap();
+        assert_eq!(restored, 2);
+        assert!(guard.point().is_none(), "restore_now 后守卫应已解除");
+        assert_eq!(ec.read(0x0730).unwrap(), 75);
+        assert_eq!(ec.read(0x0731).unwrap(), 80);
+    }
+
+    #[test]
+    fn guard_restores_after_panic() {
+        // 这是 P0-01 的核心场景: 断言失败 → panic 展开 → 硬件必须回到原值
+        let t = MockTransport::new();
+        t.seed(0x0730, 75);
+        let ec = Ec::new(t);
+
+        let point = ec.snapshot(&[0x0730], "panic 测试").unwrap();
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = ec.guard(point);
+            ec.write_verified(0x0730, 200).unwrap();
+            assert_eq!(ec.read(0x0730).unwrap(), 45, "故意失败以触发 panic");
+        }));
+
+        assert!(outcome.is_err(), "内部断言应已 panic");
+        assert_eq!(
+            ec.read(0x0730).unwrap(),
+            75,
+            "panic 路径下守卫也必须完成回滚"
+        );
     }
 }

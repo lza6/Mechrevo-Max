@@ -3,6 +3,25 @@
 
 const { invoke } = window.__TAURI__.core;
 
+/**
+ * IPC 契约表 —— **后端命令名的唯一来源**。
+ *
+ * 为什么要集中：`ipc_contract.rs` 会在编译期解析本表，与后端注册的命令集
+ * 做双向比对。命令名散落在各处时，改一个名字只能靠人记得同步，测试抓不到。
+ * 因此这里约定：**任何 invoke 都必须经由本表**（测试会检查源码里没有直接写
+ * 字符串字面量作为命令名的调用）。
+ *
+ * 修改本表后，必须同步 `app/src-tauri/tests/ipc_contract.rs`。
+ */
+const IPC = {
+  getStatus: 'get_status',
+  setMode: 'set_mode',
+  setPowerLimits: 'set_power_limits',
+  undoPower: 'undo_power',
+  undoMode: 'undo_mode',
+  relaunchElevated: 'relaunch_elevated',
+};
+
 const POLL_MS = 2000;
 const MAX_RPM_SCALE = 6000; // 进度条量程
 
@@ -62,6 +81,10 @@ let baseline = { gaming: null, office: null };
 let ecReady = false;
 /** 轮询定时器 */
 let pollTimer = null;
+/** 是否已有一次 refresh 在飞（防止轮询与动作后刷新重叠） */
+let refreshing = false;
+/** 在飞期间收到的"强制刷新"请求，等本轮结束后补一次 */
+let pendingRefresh = false;
 /**
  * 用户是否正在编辑功耗滑块。
  *
@@ -78,8 +101,31 @@ function setStatus(msg, kind = '') {
   ui.statusMsg.dataset.kind = kind;
 }
 
+/**
+ * 进入/退出"忙"状态。
+ *
+ * 忙期间**必须停掉轮询**：EC 硬件不支持并发访问，用户在切档位/写功耗时
+ * 若 2 秒轮询同时在读，就会与写入交错（后端虽然串行化了，但让轮询白白排队
+ * 只会拖慢操作反馈，也会让状态栏读数在写入过程中乱跳）。
+ */
 function setBusy(busy) {
   document.body.dataset.busy = busy ? 'true' : 'false';
+  if (busy) {
+    stopPolling();
+  } else {
+    startPolling();
+  }
+}
+
+function startPolling() {
+  if (pollTimer !== null) return;
+  pollTimer = setInterval(refresh, POLL_MS);
+}
+
+function stopPolling() {
+  if (pollTimer === null) return;
+  clearInterval(pollTimer);
+  pollTimer = null;
 }
 
 function fmt(v, fallback = '—') {
@@ -144,11 +190,16 @@ function renderEc(ec) {
   ui.alertMsg.textContent = ec.message;
   ui.alert.hidden = false;
 
-  // 权限不足时给出"一键提权重启"；驱动未就绪时给出命令行步骤
+  // 权限不足 / 内部状态异常 → 一键重启；驱动未就绪 → 给出命令行步骤
   const needsElevation = ec.hint === 'elevation';
-  ui.relaunch.hidden = !needsElevation;
-  ui.alertDriver.hidden = needsElevation;
-  ui.alertTitle.textContent = needsElevation ? '需要管理员权限' : 'EC 通道不可用';
+  const needsRestart = ec.hint === 'restart';
+  ui.relaunch.hidden = !(needsElevation || needsRestart);
+  ui.alertDriver.hidden = needsElevation || needsRestart;
+  ui.alertTitle.textContent = needsElevation
+    ? '需要管理员权限'
+    : needsRestart
+      ? '需要重启程序'
+      : 'EC 通道不可用';
 }
 
 function renderMode(mode) {
@@ -229,12 +280,29 @@ function renderStatus(s) {
 
 // ---------- 行为 ----------
 
-async function refresh() {
+/**
+ * 拉取一次状态。
+ *
+ * @param {boolean} force 忙碌结束后要强制刷新时传 true —— 若此刻正好有一轮
+ *   在飞，会记下待刷新标记，等它回来再补一次，避免界面停在上一次动作前的值。
+ */
+async function refresh(force = false) {
+  if (refreshing) {
+    if (force) pendingRefresh = true;
+    return;
+  }
+  refreshing = true;
   try {
-    const s = await invoke('get_status');
+    const s = await invoke(IPC.getStatus);
     renderStatus(s);
   } catch (e) {
     setStatus(`读取状态失败：${e}`, 'err');
+  } finally {
+    refreshing = false;
+    if (pendingRefresh) {
+      pendingRefresh = false;
+      refresh();
+    }
   }
 }
 
@@ -242,12 +310,12 @@ async function doSwitchMode(mode) {
   setBusy(true);
   setStatus('正在切换档位…', 'busy');
   try {
-    const msg = await invoke('set_mode', { mode });
+    const msg = await invoke(IPC.setMode, { mode });
     setStatus(msg, 'ok');
-    await refresh();
+    await refresh(true);
   } catch (e) {
     setStatus(`切换失败：${e}`, 'err');
-    await refresh();
+    await refresh(true);
   } finally {
     setBusy(false);
   }
@@ -258,7 +326,7 @@ async function doApplyPower() {
   setBusy(true);
   setStatus('正在写入功耗墙…', 'busy');
   try {
-    const msg = await invoke('set_power_limits', {
+    const msg = await invoke(IPC.setPowerLimits, {
       mode: activePowerMode,
       pl1: cur.pl1,
       pl2: cur.pl2,
@@ -268,10 +336,10 @@ async function doApplyPower() {
     // 应用成功后释放编辑锁，让轮询恢复回填（现在回填的是新值）
     editingPower = false;
     ui.pending.dataset.dirty = 'false';
-    await refresh();
+    await refresh(true);
   } catch (e) {
     setStatus(`写入失败：${e}`, 'err');
-    await refresh();
+    await refresh(true);
   } finally {
     setBusy(false);
   }
@@ -281,11 +349,12 @@ async function doUndo(which) {
   setBusy(true);
   setStatus('正在撤销…', 'busy');
   try {
-    const msg = await invoke(which === 'mode' ? 'undo_mode' : 'undo_power');
+    const msg = await invoke(which === 'mode' ? IPC.undoMode : IPC.undoPower);
     setStatus(msg, 'ok');
-    await refresh();
+    await refresh(true);
   } catch (e) {
     setStatus(`撤销失败：${e}`, 'err');
+    await refresh(true);
   } finally {
     setBusy(false);
   }
@@ -371,7 +440,7 @@ ui.relaunch.addEventListener('click', async () => {
   setBusy(true);
   setStatus('正在请求管理员权限…', 'busy');
   try {
-    await invoke('relaunch_elevated');
+    await invoke(IPC.relaunchElevated);
     // 提权实例启动后当前进程会自行退出，一般不会走到这里
   } catch (e) {
     setStatus(`提权失败：${e}`, 'err');
@@ -407,7 +476,7 @@ function boot() {
   syncSliderOutputs();
 
   refresh();
-  pollTimer = setInterval(refresh, POLL_MS);
+  startPolling();
   setInterval(tickClock, 1000);
   tickClock();
 }

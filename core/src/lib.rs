@@ -13,8 +13,11 @@
 //!
 //! 1. **失败必须报错** —— 绝不像官方驱动那样把失败伪造成成功, 也不用 0 表示读失败.
 //! 2. **写后读回校验** —— [`ec::Ec::write_verified`] 是默认写入方式.
-//! 3. **改动前存回滚点** —— [`ec::Ec::snapshot`] + [`ec::Ec::restore`].
-//! 4. **传输层可替换** —— 协议逻辑能用 [`ec::MockTransport`] 离线测试.
+//! 3. **改动前存回滚点** —— [`ec::Ec::snapshot`] + [`ec::Ec::restore`],
+//!    需要"panic 也要还原"的场景用 [`ec::Ec::guard`] 拿 RAII 守卫.
+//! 4. **访问强制限速** —— [`ec::WindowsAcpiTransport`] 内部经 [`ec::AccessThrottle`]
+//!    节流 (默认 50 次/秒, 硬下限 10 ms), 调用方无法绕过.
+//! 5. **传输层可替换** —— 协议逻辑能用 [`ec::MockTransport`] 离线测试.
 //!
 //! # 快速开始
 //!
@@ -40,7 +43,10 @@ pub mod namespace;
 pub mod sensors;
 
 pub use control::{ChangeRecord, PowerController, PowerLimits};
-pub use ec::{Ec, EcTransport, MockTransport, RollbackPoint, WindowsAcpiTransport};
+pub use ec::{
+    AccessThrottle, DEFAULT_MIN_INTERVAL, Ec, EcTransport, HARD_MIN_INTERVAL, MockTransport,
+    RestoreGuard, RollbackPoint, WindowsAcpiTransport,
+};
 pub use error::{Error, Result};
 pub use mode::{ModeChange, ModeController, OperatingMode};
 pub use namespace::{AddrStatus, Mode, Reg};

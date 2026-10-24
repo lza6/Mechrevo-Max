@@ -20,6 +20,9 @@ app/src-tauri/gen/
 .idea/
 *.swp
 
+# 工具缓存（graft 代码图谱）
+graft/
+
 # ============================================================
 # 逆向产物 —— 不分发官方二进制 / 反编译输出 (见 README 合规说明)
 # ============================================================
@@ -51,3 +54,6 @@ burn.cu
 *gpuload*
 *burn*.cu
 stress-cpu*
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

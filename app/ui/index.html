@@ -32,7 +32,7 @@
     </header>
 
     <!-- EC 不可用提示 -->
-    <section class="alert" id="ec-alert" hidden>
+    <section class="alert" id="ec-alert" role="alert" hidden>
       <div class="alert-head" id="ec-alert-title">EC 通道不可用</div>
       <p class="alert-body" id="ec-alert-msg"></p>
       <div id="alert-driver">
@@ -147,7 +147,7 @@ pnputil.exe /scan-devices</pre>
 
     <!-- 底部状态 / 日志 -->
     <footer class="statusbar">
-      <span id="status-msg">就绪</span>
+      <span id="status-msg" role="status" aria-live="polite">就绪</span>
       <div class="spacer"></div>
       <span class="mono" id="clock">—</span>
     </footer>

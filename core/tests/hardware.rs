@@ -14,12 +14,17 @@
 //!
 //! 写测试遵循「先存回滚点 → 写入 → 读回校验 → 立即还原」的流程，
 //! 测试结束后硬件状态应完全恢复原样。
+//!
+//! **所有写操作都必须挂在 [`RestoreGuard`] 上**：断言失败会让测试 panic 展开、
+//! 跳过后续语句，只有 `Drop` 仍会执行。没有守卫时，一次断言失败就会把硬件
+//! 停在改动后的状态（见 `docs/计划书/下一步改进指南.md` P0-01）。
 
 use mechrevo_core::ec::{Ec, WindowsAcpiTransport};
 use mechrevo_core::namespace::Mode;
 use mechrevo_core::{PowerController, PowerLimits, Sensors};
 
 fn ec() -> Ec<WindowsAcpiTransport> {
+    // WindowsAcpiTransport 内部强制限速（默认 50 次/秒），此处拿到的就是安全通路
     let transport = WindowsAcpiTransport::new().expect("无法构造传输层 —— EC 访问仅支持 Windows");
     Ec::new(transport)
 }
@@ -119,12 +124,15 @@ fn real_write_then_restore() {
 
     let record = ctl.apply_defaults(Mode::Office, &target).expect("写入失败");
 
+    // 从这里开始硬件已被改动 —— 守卫保证 panic 时也会还原
+    let mut guard = ec.guard(record.rollback.clone());
+
     let after = ctl.read_defaults(Mode::Office).expect("读回失败");
     println!("改动后 Office: {after:?}");
     assert_eq!(after.pl1, target.pl1, "PL1 应已生效");
 
     // 立即还原
-    let restored = record.undo(&ec).expect("回滚失败");
+    let restored = guard.restore_now().expect("回滚失败");
     println!("回滚 {restored} 个寄存器");
 
     let final_state = ctl.read_defaults(Mode::Office).expect("最终读取失败");
@@ -149,6 +157,9 @@ fn mode_switch_roundtrip() {
 
     for mode in OperatingMode::all() {
         let change = ctl.switch(mode).expect("切换失败");
+        // 档位已变 —— 守卫确保断言失败/panic 时也会还原
+        let mut guard = ec.guard(change.rollback.clone());
+
         let after = ctl.current().expect("读回失败");
         let snap = sensors.snapshot().expect("读传感器失败");
         println!(
@@ -159,7 +170,7 @@ fn mode_switch_roundtrip() {
         );
         assert_eq!(after, Some(mode), "切换后应能读回目标档位");
 
-        let restored = change.undo(&ec).expect("回滚失败");
+        let restored = guard.restore_now().expect("回滚失败");
         println!("  回滚 {restored} 个寄存器");
     }
 

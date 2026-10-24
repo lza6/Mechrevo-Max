@@ -24,7 +24,32 @@ struct UndoStack {
 /// 全局应用状态.
 #[derive(Default)]
 struct AppState {
+    /// 串行化所有 EC 访问.
+    ///
+    /// EC 硬件不支持并发访问（`docs/SPEC.md` §7）。此前的实现只保护了撤销栈，
+    /// 没有保护 EC 本身：2 秒轮询与用户写入会各自打开句柄同时读写，
+    /// 可能读到"写了一半"的状态。现在所有命令都必须先取这把锁。
+    ec: Mutex<()>,
+    /// 最近一次改动，用于一键撤销.
     undo: Mutex<UndoStack>,
+}
+
+/// 取 EC 访问锁 —— 锁中毒时给出可行动的提示，而不是 panic.
+fn lock_ec(state: &AppState) -> Result<std::sync::MutexGuard<'_, ()>, (&'static str, String)> {
+    state.ec.lock().map_err(|_| {
+        (
+            "restart",
+            "内部状态异常（上一次操作异常终止）。请重启本程序，EC 通道会自动恢复。".to_owned(),
+        )
+    })
+}
+
+/// 取消栈当前状态；锁中毒时返回"都不可撤销"而不是 panic.
+fn undo_flags(state: &AppState) -> (bool, bool) {
+    match state.undo.lock() {
+        Ok(undo) => (undo.power.is_some(), undo.mode.is_some()),
+        Err(_) => (false, false),
+    }
 }
 
 /// EC 访问状态.
@@ -37,7 +62,8 @@ enum EcStatus {
     Unavailable {
         /// 面向用户的说明.
         message: String,
-        /// 提示类型: `driver` = 驱动/设备未就绪; `elevation` = 权限不足.
+        /// 提示类型: `driver` = 驱动/设备未就绪; `elevation` = 权限不足;
+        /// `restart` = 程序内部状态异常，需重启。
         hint: &'static str,
     },
 }
@@ -102,8 +128,22 @@ fn classify(err: &mechrevo_core::Error) -> (&'static str, String) {
 }
 
 /// 构造一个"EC 不可用"的状态载荷.
-fn unavailable(err: &mechrevo_core::Error, can_undo_power: bool, can_undo_mode: bool) -> StatusPayload {
+fn unavailable(
+    err: &mechrevo_core::Error,
+    can_undo_power: bool,
+    can_undo_mode: bool,
+) -> StatusPayload {
     let (hint, message) = classify(err);
+    unavailable_with(hint, message, can_undo_power, can_undo_mode)
+}
+
+/// 用已确定的提示类型构造"EC 不可用"载荷.
+fn unavailable_with(
+    hint: &'static str,
+    message: String,
+    can_undo_power: bool,
+    can_undo_mode: bool,
+) -> StatusPayload {
     StatusPayload {
         ec: EcStatus::Unavailable { message, hint },
         project_id: None,
@@ -123,10 +163,15 @@ fn unavailable(err: &mechrevo_core::Error, can_undo_power: bool, can_undo_mode: 
 /// 读取当前全部状态. EC 不可用时也返回结构化结果，不抛错让前端能渲染提示.
 #[tauri::command]
 fn get_status(state: State<'_, AppState>) -> StatusPayload {
-    let undo = state.undo.lock().expect("undo 锁中毒");
-    let can_undo_power = undo.power.is_some();
-    let can_undo_mode = undo.mode.is_some();
-    drop(undo);
+    // 串行化：轮询与用户操作不会同时进硬件
+    let _guard = match lock_ec(&state) {
+        Ok(guard) => guard,
+        Err((hint, message)) => {
+            let (can_undo_power, can_undo_mode) = undo_flags(&state);
+            return unavailable_with(hint, message, can_undo_power, can_undo_mode);
+        }
+    };
+    let (can_undo_power, can_undo_mode) = undo_flags(&state);
 
     let ec = match open_ec() {
         Ok(ec) => ec,
@@ -190,15 +235,17 @@ fn relaunch_elevated() -> Result<(), String> {
 /// 切换运行档位.
 #[tauri::command]
 fn set_mode(state: State<'_, AppState>, mode: String) -> Result<String, String> {
-    let target = OperatingMode::from_key(&mode)
-        .ok_or_else(|| format!("未知档位: {mode}"))?;
+    let target = OperatingMode::from_key(&mode).ok_or_else(|| format!("未知档位: {mode}"))?;
+
+    // 持锁覆盖"打开 EC → 切换 → 记入撤销栈"的整个过程
+    let _guard = lock_ec(&state).map_err(|(_, message)| message)?;
 
     let ec = open_ec().map_err(|e| e.to_string())?;
     let ctl = ModeController::new(&ec);
     let change = ctl.switch(target).map_err(|e| e.to_string())?;
     let name = target.display_name().to_owned();
 
-    let mut undo = state.undo.lock().map_err(|e| e.to_string())?;
+    let mut undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
     undo.mode = Some(change);
     Ok(format!("已切换到{name}档"))
 }
@@ -219,11 +266,14 @@ fn set_power_limits(
     };
 
     let limits = PowerLimits::new(pl1, pl2, pl4).map_err(|e| e.to_string())?;
+
+    let _guard = lock_ec(&state).map_err(|(_, message)| message)?;
+
     let ec = open_ec().map_err(|e| e.to_string())?;
     let ctl = PowerController::new(&ec);
     let record = ctl.apply_defaults(target, &limits).map_err(|e| e.to_string())?;
 
-    let mut undo = state.undo.lock().map_err(|e| e.to_string())?;
+    let mut undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
     undo.power = Some(record);
     Ok(format!(
         "{}功耗已设为 PL1={} PL2={} PL4={}",
@@ -235,27 +285,52 @@ fn set_power_limits(
 }
 
 /// 撤销最近一次功耗改动.
+///
+/// 只有**真正撤销成功**才把记录出栈：失败时记录保留，用户可以重试
+/// （此前是 `take()` 后直接撤销，失败即永久丢失回滚点）。
 #[tauri::command]
 fn undo_power(state: State<'_, AppState>) -> Result<String, String> {
+    let _guard = lock_ec(&state).map_err(|(_, message)| message)?;
     let ec = open_ec().map_err(|e| e.to_string())?;
-    let mut undo = state.undo.lock().map_err(|e| e.to_string())?;
-    let Some(record) = undo.power.take() else {
+
+    let record = {
+        let undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+        undo.power.clone()
+    };
+    let Some(record) = record else {
         return Err("没有可撤销的功耗改动".into());
     };
-    let n = record.undo(&ec).map_err(|e| e.to_string())?;
-    Ok(format!("已还原 {n} 个寄存器"))
+
+    let restored = record
+        .undo(&ec)
+        .map_err(|e| format!("撤销失败（回滚点已保留，可重试）: {e}"))?;
+
+    let mut undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+    undo.power = None;
+    Ok(format!("已还原 {restored} 个寄存器"))
 }
 
 /// 撤销最近一次档位切换.
 #[tauri::command]
 fn undo_mode(state: State<'_, AppState>) -> Result<String, String> {
+    let _guard = lock_ec(&state).map_err(|(_, message)| message)?;
     let ec = open_ec().map_err(|e| e.to_string())?;
-    let mut undo = state.undo.lock().map_err(|e| e.to_string())?;
-    let Some(change) = undo.mode.take() else {
+
+    let change = {
+        let undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+        undo.mode.clone()
+    };
+    let Some(change) = change else {
         return Err("没有可撤销的档位切换".into());
     };
-    let n = change.undo(&ec).map_err(|e| e.to_string())?;
-    Ok(format!("已还原 {n} 个寄存器"))
+
+    let restored = change
+        .undo(&ec)
+        .map_err(|e| format!("撤销失败（回滚点已保留，可重试）: {e}"))?;
+
+    let mut undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+    undo.mode = None;
+    Ok(format!("已还原 {restored} 个寄存器"))
 }
 
 fn main() {
@@ -336,4 +411,82 @@ fn fit_window_to_monitor(app: &mut tauri::App) {
     let x = origin.x + margin;
     let y = origin.y + margin;
     let _ = window.set_position(PhysicalPosition::new(x, y));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 制造一次锁中毒：持有锁的线程 panic，锁即被标记为 poisoned.
+    fn poison<T>(lock: &Mutex<T>) {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = lock.lock().unwrap();
+            panic!("故意 panic 以毒化锁");
+        }));
+        assert!(result.is_err(), "内部 panic 应被捕获");
+        assert!(lock.is_poisoned(), "锁应已中毒");
+    }
+
+    #[test]
+    fn fresh_state_has_nothing_to_undo() {
+        let state = AppState::default();
+        assert_eq!(undo_flags(&state), (false, false));
+    }
+
+    #[test]
+    fn lock_ec_returns_actionable_hint_instead_of_panicking() {
+        let state = AppState::default();
+        poison(&state.ec);
+
+        let err = lock_ec(&state).err().expect("锁中毒时必须返回错误");
+        assert_eq!(err.0, "restart", "应给出 restart 提示而不是驱动修复命令");
+        assert!(
+            err.1.contains("重启"),
+            "提示文案应告诉用户重启程序，实际: {}",
+            err.1
+        );
+    }
+
+    #[test]
+    fn undo_flags_tolerates_poisoned_undo_lock() {
+        let state = AppState::default();
+        poison(&state.undo);
+        // 不得 panic，返回"都不能撤销"即可
+        assert_eq!(undo_flags(&state), (false, false));
+    }
+
+    #[test]
+    fn lock_ec_serializes_access() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let state = Arc::new(AppState::default());
+        let inside = Arc::new(AtomicUsize::new(0));
+        let max_seen = Arc::new(AtomicUsize::new(0));
+
+        let mut handles = Vec::new();
+        for _ in 0..4 {
+            let state = Arc::clone(&state);
+            let inside = Arc::clone(&inside);
+            let max_seen = Arc::clone(&max_seen);
+            handles.push(std::thread::spawn(move || {
+                for _ in 0..20 {
+                    let _guard = lock_ec(&state).expect("锁不应中毒");
+                    let now = inside.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_seen.fetch_max(now, Ordering::SeqCst);
+                    // 模拟一次 EC 访问的临界区
+                    std::thread::yield_now();
+                    inside.fetch_sub(1, Ordering::SeqCst);
+                }
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        assert_eq!(
+            max_seen.load(Ordering::SeqCst),
+            1,
+            "临界区内同时出现多个访问者 —— EC 访问没有串行化"
+        );
+    }
 }

@@ -50,6 +50,9 @@ const BACKEND_COMMANDS: &[(&str, &[&str])] = &[
 ];
 
 /// 前端 `app/ui/app.js` 实际使用的命令与参数名（camelCase）。
+///
+/// ⚠️ 这张表用于**参数名**校验；命令名本身由下方 [`parse_ipc_table`] 从
+/// 前端源码的 `IPC` 契约表里解析，不再依赖人手同步。
 const FRONTEND_CONTRACT: &[(&str, &[&str])] = &[
     ("get_status", &[]),
     ("set_mode", &["mode"]),
@@ -58,6 +61,31 @@ const FRONTEND_CONTRACT: &[(&str, &[&str])] = &[
     ("undo_mode", &[]),
     ("relaunch_elevated", &[]),
 ];
+
+/// 前端源码 —— 编译期嵌入，测试时直接解析其 `IPC` 契约表。
+///
+/// 这样「前端新增了一个后端没有的命令」会让测试红，而不是等用户点到那个
+/// 按钮才静默失败。注意：`IPC` 块里不得写带引号的注释，解析依赖这一点。
+const FRONTEND_SOURCE: &str = include_str!("../../ui/app.js");
+
+/// 从 `app.js` 的 `const IPC = { ... };` 块里取出所有命令名字面量。
+fn parse_ipc_table(source: &str) -> Vec<String> {
+    let marker = "const IPC = {";
+    let start = source
+        .find(marker)
+        .unwrap_or_else(|| panic!("app.js 里找不到 `{marker}` —— 契约表被删除或改名了"));
+    let rest = &source[start + marker.len()..];
+    let end = rest.find("};").expect("IPC 契约表未闭合（缺少 `};`）");
+    let block = &rest[..end];
+
+    // 块内只含 `key: 'value',` 形式，因此按单引号切开后取奇数段即为值
+    block
+        .split('\'')
+        .enumerate()
+        .filter(|(i, _)| i % 2 == 1)
+        .map(|(_, value)| value.to_owned())
+        .collect()
+}
 
 #[cfg(test)]
 mod tests {
@@ -92,10 +120,66 @@ mod tests {
         );
     }
 
+    /// 前端源码里的 `IPC` 契约表必须与后端注册的命令集**完全一致**（双向）。
+    ///
+    /// 这条是本文件的核心防线：它读的是真实前端源码，而不是另一张手写表。
+    #[test]
+    fn frontend_source_ipc_table_matches_backend() {
+        let parsed = parse_ipc_table(FRONTEND_SOURCE);
+        assert!(!parsed.is_empty(), "IPC 契约表解析结果为空");
+
+        let backend: BTreeSet<&str> = BACKEND_COMMANDS.iter().map(|(n, _)| *n).collect();
+        let frontend: BTreeSet<&str> = parsed.iter().map(String::as_str).collect();
+
+        assert_eq!(
+            frontend.len(),
+            parsed.len(),
+            "IPC 契约表存在重复命令名: {parsed:?}"
+        );
+
+        let only_frontend: Vec<_> = frontend.difference(&backend).collect();
+        let only_backend: Vec<_> = backend.difference(&frontend).collect();
+        assert!(
+            only_frontend.is_empty(),
+            "前端调用了后端不存在的命令: {only_frontend:?}"
+        );
+        assert!(
+            only_backend.is_empty(),
+            "后端注册了但前端从未调用的命令: {only_backend:?}"
+        );
+    }
+
+    /// 所有 invoke 都必须经由 `IPC` 表，不允许直接把命令名写成字符串。
+    #[test]
+    fn no_raw_string_command_names_in_frontend() {
+        assert!(
+            !FRONTEND_SOURCE.contains("invoke('"),
+            "发现直接传字符串命令名的 invoke 调用 —— 必须改成 invoke(IPC.xxx)"
+        );
+        assert!(
+            !FRONTEND_SOURCE.contains("invoke(\""),
+            "发现直接传字符串命令名的 invoke 调用 —— 必须改成 invoke(IPC.xxx)"
+        );
+    }
+
+    /// 手写的参数表与源码解析结果也必须一致（防止只改一处的半更新）。
+    #[test]
+    fn manual_contract_matches_source_ipc_table() {
+        let parsed: BTreeSet<String> = parse_ipc_table(FRONTEND_SOURCE).into_iter().collect();
+        let manual: BTreeSet<&str> = FRONTEND_CONTRACT.iter().map(|(n, _)| *n).collect();
+
+        assert_eq!(parsed.len(), manual.len(), "两张表的命令数不一致");
+        for name in &manual {
+            assert!(
+                parsed.contains(*name),
+                "手写参数表里的 `{name}` 在 IPC 契约表中不存在"
+            );
+        }
+    }
+
     /// 每个命令的参数名必须逐个匹配（含 camelCase 转换结果）。
     #[test]
-    fn parameter_names_match_with_camel_case_conversion() {
-        for (name, backend_params) in BACKEND_COMMANDS {
+    fn parameter_names_match_with_camel_case_conversion() {        for (name, backend_params) in BACKEND_COMMANDS {
             let frontend_params = FRONTEND_CONTRACT
                 .iter()
                 .find(|(n, _)| n == name)

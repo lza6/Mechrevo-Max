@@ -13,6 +13,67 @@
 
 ---
 
+## [0.1.1] — 2026-10-24
+
+护栏补丁版：**不新增硬件功能**，只补齐"安全、可信、可回归"的地基。
+全部改动可在无硬件条件下验证（mock 单测 + 静态检查 + 源码级契约解析）。
+
+### 修复（安全）
+
+- **真机测试在断言失败时不回滚硬件**（P0）—— 新增 `RestoreGuard`（RAII），
+  panic 展开路径也会完成还原；`core/tests/hardware.rs` 的两个写测试全部改用守卫。
+- **EC 访问未串行化**（P1）—— `AppState` 新增 EC 访问互斥，所有 IPC 命令
+  （读写/撤销）都必须先取锁；前端在"忙"期间暂停 2 秒轮询，并给 `refresh`
+  加在飞标记防止请求重叠。
+- **Rust 侧无访问限速护栏**（P1）—— 新增 `AccessThrottle`，由
+  `WindowsAcpiTransport` 在**唯一 IOCTL 出口**处调用：默认 20 ms（50 次/秒），
+  硬下限 10 ms（100 次/秒），调用方无法绕过。
+- **`undo_power` / `undo_mode` 失败时丢弃回滚记录**（P1）—— 改为只有真正
+  撤销成功才出栈，失败时保留记录并提示"可重试"。
+- **锁中毒导致 `get_status` panic**（P2）—— 改为返回结构化状态 + `restart`
+  提示；前端新增"需要重启程序"分支。
+- **撤销档位时误写自清零的命令寄存器**（P2）—— 提交寄存器 `0x0767` 移出快照集合。
+
+### 修复（工程与文档）
+
+- **证据链断裂**（P0）：新增 `docs/protocol/ec-baseline.md` —— 脱敏入库版协议基线
+  （7 项交叉核对地址 + 传感器/档位编码 + 全量扫描统计 + 复现命令 + 未验证项清单）；
+  原始 `reverse/evidence/*.json` 继续不入库。`README` / `ec-access.md` /
+  `workflow_status.md` / `CONTRIBUTING.md` 的引用一并改正。
+- **IPC 契约测试存在人工同步盲区**（P2）：前端新增 `IPC` 契约表，
+  `ipc_contract.rs` 用 `include_str!` 解析 `app/ui/app.js` 源码，
+  双向比对命令集，并断言"不存在直接传字符串命令名的 invoke 调用"。
+- 修正 4 处文档过期：需求矩阵 R10/R11（实际已闭环）、`workflow_status.md`
+  的"下一步"（B1 早已解决）、工具数 12→16、`ec_health.ps1`（不存在）。
+- 发布清单新增"文档一致性自检"与合规自动检查命令。
+- 删除 3 个死依赖（`serde_json`、`tracing`、`tempfile`）；删除两个空目录
+  （`protocol/`、`test/`）；`graft/` 加入 `.gitignore`。
+
+### 可访问性
+
+- 新增 `:focus-visible` 焦点样式（此前键盘用户看不到焦点）；状态栏加
+  `role="status" aria-live="polite"`；告警区加 `role="alert"`；
+  支持 `prefers-reduced-motion`。
+
+### 测试
+
+- 核心库单测 **33 → 44**（新增：节流夹取/间隔/并发串行、回滚守卫
+  drop/disarm/panic 路径、提交寄存器不入快照）。
+- IPC 契约测试 **5 → 8**（新增：源码契约表双向比对、禁止裸字符串命令名、
+  手写表与源码一致性）。
+- 新增二进制单测 **4 个**（锁中毒提示、撤销栈容错、EC 访问串行化）。
+- 实际执行：`cargo test` 44 passed + 1 doctest；`cargo clippy --all-targets`
+  0 warning；`cargo fmt --check` 干净；`cargo test --bin mechrevo-max` 4 passed；
+  `cargo test --test ipc_contract` 8 passed；`node --check app/ui/app.js` 通过。
+
+### 已知限制（与 0.1.0 相同）
+
+- 温度读数仍未实现（v0.2.0，需一次用户在场的只读探测）
+- 仅在本机（旷世16 Pro GM6PQ0X）验证；跨机型地址不通用
+- 真机集成测试与 UI 自动化 E2E 按安全策略不执行
+
+---
+
 ## [0.1.0] — 2026-10-17
 
 首个可用版本。核心链路已在真机完整验证。
@@ -45,7 +106,7 @@
 - 启动自检：UI 元素 id 与 JS 映射不一致时立刻报告
 - 滑块编辑锁：防止轮询覆盖用户正在拖动的值
 
-**工具（Python，12 个）**
+**工具（Python，16 个）**
 - EC 读取 / 扫描 / 验证 / 健康自检 / 档位实验 / 稳定性测试
 - ACPI 表导出与检索、AML 解析（EC 操作区、设备定义）
 - 驱动版本对比、官方注册表解析

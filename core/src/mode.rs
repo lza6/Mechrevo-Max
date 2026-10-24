@@ -23,11 +23,11 @@ use crate::error::Result;
 use crate::namespace as ns;
 
 /// 档位控制涉及的寄存器集合（用于快照/回滚）.
-const MODE_REGS: [u16; 3] = [
-    ns::MODE_FIELD_1.addr,
-    ns::MODE_FIELD_2.addr,
-    ns::MODE_COMMIT.addr,
-];
+///
+/// **刻意不含提交寄存器 `0x767`**：它写入后由固件自动清零，没有"原始值"
+/// 可言，把它纳入快照会让撤销流程去写一个"命令寄存器"，语义未定义。
+/// 撤销时只还原两个档位字段，再写一次提交触发即可。
+const MODE_REGS: [u16; 2] = [ns::MODE_FIELD_1.addr, ns::MODE_FIELD_2.addr];
 
 /// 运行档位.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -257,6 +257,22 @@ mod tests {
             Some(OperatingMode::Balance),
             "失败后档位字段必须回到原值"
         );
+    }
+
+    #[test]
+    fn rollback_point_excludes_commit_register() {
+        // 提交寄存器写入后自清零, 没有"原始值"可还原; 纳入快照会让撤销去写命令寄存器.
+        let ec = ec_in(OperatingMode::Balance);
+        let ctl = ModeController::new(&ec);
+        let change = ctl.switch(OperatingMode::Turbo).unwrap();
+
+        assert_eq!(change.rollback.len(), 2, "回滚点只应包含两个档位字段");
+        assert!(
+            change.rollback.get(ns::MODE_COMMIT.addr).is_none(),
+            "提交寄存器不应进入回滚点"
+        );
+        assert!(change.rollback.get(ns::MODE_FIELD_1.addr).is_some());
+        assert!(change.rollback.get(ns::MODE_FIELD_2.addr).is_some());
     }
 
     #[test]

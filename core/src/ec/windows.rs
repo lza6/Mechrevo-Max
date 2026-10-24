@@ -16,7 +16,6 @@ use crate::error::{Error, Result};
 #[cfg(windows)]
 mod imp {
     use super::{EcTransport, Error, IOCTL_EC_READ, IOCTL_EC_WRITE, Result};
-    use crate::ec::AccessThrottle;
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::{
@@ -29,13 +28,14 @@ mod imp {
 
     /// 真机传输层.
     ///
-    /// 内部持有 [`AccessThrottle`]: 每次 IOCTL 前都会补齐最小访问间隔,
-    /// 因此"限速"对调用方不可绕过 (见 `docs/SPEC.md` §5.1).
+    /// 限速与互斥由**进程级**的 [`crate::ec::throttle::global`] 闸门保证:
+    /// 每次 IOCTL 的**整个过程**都在闸门内执行, 因此
+    /// ① 两次访问起点间隔 ≥ 最小间隔, ② 两次访问不会重叠, ③ 换个 transport
+    /// 实例也无法绕过 (状态是进程共享的). 见 `docs/SPEC.md` §5.1.
     #[derive(Debug)]
     pub struct WindowsAcpiTransport {
         path: String,
         wide_path: Vec<u16>,
-        throttle: AccessThrottle,
     }
 
     impl WindowsAcpiTransport {
@@ -60,18 +60,7 @@ mod imp {
             Ok(Self {
                 path: path.to_owned(),
                 wide_path,
-                throttle: AccessThrottle::new(),
             })
-        }
-
-        /// 用自定义最小访问间隔构造 (低于硬下限会被夹回).
-        ///
-        /// # Errors
-        /// 路径为空时返回错误.
-        pub fn with_throttle(path: &str, min_interval: std::time::Duration) -> Result<Self> {
-            let mut transport = Self::with_path(path)?;
-            transport.throttle = AccessThrottle::with_min_interval(min_interval);
-            Ok(transport)
         }
 
         /// 设备路径.
@@ -80,10 +69,10 @@ mod imp {
             &self.path
         }
 
-        /// 当前生效的最小访问间隔.
+        /// 当前生效的最小访问间隔（来自进程级闸门）.
         #[must_use]
         pub fn min_interval(&self) -> std::time::Duration {
-            self.throttle.min_interval()
+            crate::ec::throttle::global().min_interval()
         }
 
         /// 探测设备是否可用 (打开一次句柄).
@@ -131,10 +120,15 @@ mod imp {
         }
 
         /// 发起一次 IOCTL.
+        ///
+        /// 整个访问(打开句柄 + DeviceIoControl + 关闭句柄)都在限速闸门内执行,
+        /// 因此单次访问耗时超过最小间隔时, 也不会出现两个访问重叠.
         fn ioctl(&self, code: u32, input: &[u8], out_len: usize) -> Result<Vec<u8>> {
-            // 唯一的真实硬件出口 —— 限速在这里强制执行, 调用方无法绕过.
-            self.throttle.wait();
+            crate::ec::throttle::global().run(|| self.ioctl_unguarded(code, input, out_len))
+        }
 
+        /// 真正发起 IOCTL —— **只能**由 [`Self::ioctl`] 在闸门内调用.
+        fn ioctl_unguarded(&self, code: u32, input: &[u8], out_len: usize) -> Result<Vec<u8>> {
             let handle = self.open()?;
             let mut output = vec![0u8; out_len];
             let mut returned: u32 = 0;

@@ -21,11 +21,11 @@
 
 | 项 | 状态 | 证据 | 最后改动 |
 |---|---|---|---|
-| 单元测试（44 个） | ✅ 已验证 | `cargo test` → `44 passed; 0 failed` | 2026-10-24 |
-| clippy 全目标 | ✅ 已验证 | `cargo clippy --all-targets` → 0 warning | 2026-10-24 |
-| 格式化 | ✅ 已验证 | `cargo fmt --check` → 干净 | 2026-10-24 |
+| 单元测试（46 个） | ✅ 已验证 | `cargo test` → `46 passed; 0 failed` | 2026-10-24 |
+| clippy 全目标（**scope: core + app 两个 crate**） | ✅ 已验证 | `cargo clippy --all-targets` → 两个包均 0 warning | 2026-10-24 |
+| 格式化（**scope: core + app 两个 crate**） | ✅ 已验证 | `cargo fmt --check` → 两个包均 exit 0 | 2026-10-24 |
 | 文档测试 | ✅ 已验证 | `cargo test` → `1 passed`（doctest） | 2026-10-24 |
-| EC 访问限速 | ✅ 已验证 | `ec::throttle` 单测 6 个：默认 50 次/秒、低于硬下限被夹回、首次不等待、两次访问间隔达标、4 线程并发被串行 | 2026-10-24 |
+| EC 访问限速 + 不重叠 | ✅ 已验证 | `ec::throttle` 单测 8 个：默认 50 次/秒、低于硬下限被夹回、首次不等待、间隔达标、**4 线程 ×「比间隔还慢的模拟 IOCTL」并发峰值恒为 1**、进程级单例（`global()` 两次取用同一实例） | 2026-10-24 |
 | 回滚守卫（panic 路径） | ✅ 已验证 | `guard_restores_after_panic`（`catch_unwind` 后值已还原） | 2026-10-24 |
 
 ### 覆盖的测试要点（改动这些区域时须重跑）
@@ -33,7 +33,7 @@
 | 模块 | 已覆盖 |
 |---|---|
 | `ec::transport` | Mock 读写、stuck 地址忽略写入、读失败返回 Err 而非 0 |
-| `ec::throttle` | 默认间隔、硬下限夹取、首次不阻塞、间隔补足、并发串行化 |
+| `ec::throttle` | 默认间隔、硬下限夹取、首次不阻塞、间隔补足（从上次访问**结束**计时）、**访问不重叠（峰值并发=1）**、进程级单例共享 |
 | `ec`（Ec\<T\>） | 写后读回、校验失败检测、位操作只动一位、越界拒绝、快照/回滚往返、快照遇读失败即报错、连续块读、**守卫 drop/disarm/restore_now/panic 回滚** |
 | `control` | 读官方出厂值、越界前置拦截、应用+回滚、**寄存器卡住时自动回滚** |
 | `mode` | 三档识别、未知编码返回 None（不猜）、三档往复切换、**提交寄存器自清零不误报**、卡住时回滚、key 往返、**提交寄存器不入快照** |
@@ -56,6 +56,7 @@
 | UI 元素 id 与 `ui` 映射一致性 | ✅ 静态确认 | 28 项逐一比对，全部匹配 | 2026-10-17 |
 | 可访问性 | ✅ 静态确认 | `:focus-visible` 覆盖按钮/滑块/tab；`role="status" aria-live` 状态栏；`role="alert"` 告警区；`prefers-reduced-motion` 降级 | 2026-10-24 |
 | 界面真实渲染 | ✅ 已验证 | 截图 `docs/screenshots/main.png`（显示真实 EC 数据，v0.1.0 时采集） | 2026-10-17 |
+| 独立复审（reviewer 子代理） | ✅ 已验证 | 独立跑 `core` 46 / `app` bin 4 / 契约 8 / 两个 crate 的 fmt+clippy；产出 4 条 Required Changes（R1 限速锁未覆盖 IOCTL、R2 限速状态实例级、R3 台账超范围、R4 注释矛盾），**已全部修复** | 2026-10-24 |
 | 前后端端到端（UI 自动化） | 🚫 禁用 | 见 `docs/SPEC.md` §5.1（避免反复启停驱动硬件） | — |
 
 ### IPC 契约测试覆盖

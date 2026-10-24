@@ -81,3 +81,23 @@ v0.2.0 温度读数（需用户在场的低频只读探测）；Q-03 / Q-04 / Q-
 仍未拍板：Q-03（`ec_stress.py` 去留）、Q-04（自动更新）、Q-05（托盘/自启）。
 
 下一步进入 **v0.1.1 实施**（护栏补丁，全部离线可验），需切换到执行模式后开工。
+
+---
+
+## 2026-10-24（收尾）· v0.1.2 独立复审修复
+
+### 复审结论
+reviewer 子代理独立跑验证后给出 **CONDITIONAL PASS**，指出 v0.1.1 两条核心声明只成立一半：
+
+| 编号 | 问题 | 修复 |
+|---|---|---|
+| R1（P1） | `AccessThrottle::wait()` 释放锁后 IOCTL 才执行 → 单次 IOCTL 慢于 20ms 时两次访问会重叠；同名测试只断言总耗时，发现不了 | 改为 `run(|| ...)` 整个访问持锁；新增 `run_never_allows_overlapping_access` 断言峰值并发=1 |
+| R2（P1） | 闸门是 transport 字段，每条命令 `new()` → 每条命令首次访问零间隔，新路径可绕过 | 改为进程级 `global()` 单例；新增指针相等断言 |
+| R3（P2） | 台账把 clippy/fmt 记成无条件通过，实际只跑 `core`；`app` fmt 失败、clippy 3 警告 | 修掉 3 个 lint + `cargo fmt`；台账标注 scope 为两个 crate |
+| R4（P2） | `mode.rs` 注释称撤销会写提交寄存器，实际不写 | 注释与实现对齐 + 标注"是否需补提交未验证" |
+
+### 验证（实际执行）
+`core` 46 passed + 1 doctest · `bin` 4 passed · 契约 8 passed · **两个 crate** 均 fmt 干净 + clippy 0 warning · release 构建成功（4 994 048 B，sha256 `c85a29ea…f33363`）
+
+### 未处理（已记入 known-issues P3-11/12/13）
+`get_status` ≈280ms 持锁（未测帧率）· 守卫 Drop 失败仅 stderr（release 无去处）· 契约参数名仍手写

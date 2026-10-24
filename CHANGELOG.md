@@ -13,6 +13,59 @@
 
 ---
 
+## [0.1.2] — 2026-10-24
+
+**独立复审后的修正版。** v0.1.1 宣称的两条核心保证（"限速不可绕过"、"不会并发冲进硬件"）
+经独立审查判定**只成立一半**，本版把实现补齐；同时修正证据台账里超出实际范围的断言。
+
+### 修复（v0.1.1 的能力声明超出实现）
+
+- **限速器的锁没有覆盖实际访问**：`AccessThrottle::wait()` 在返回时就释放了锁，
+  真正的 `DeviceIoControl` 在锁外执行 —— 若单次 IOCTL 耗时超过 20 ms，两次访问仍会重叠。
+  改为 `AccessThrottle::run(|| ...)`：**整个访问过程持锁**，从等待间隔一直持到访问返回；
+  间隔从"上一次访问结束"开始计时（更保守）。
+- **限速状态是 per-instance**：原实现把闸门作为 `WindowsAcpiTransport` 字段，
+  而每条 IPC 命令都 `WindowsAcpiTransport::new()` → 每条命令的第一次访问都是零间隔，
+  任何新代码路径建个新 transport 就绕过了。改为**进程级单例** `ec::throttle::global()`，
+  全进程共享同一份状态（新增 `global_throttle_is_shared_across_transports` 断言同一实例）。
+- **补上真正能发现重叠的测试**：`run_never_allows_overlapping_access`
+  用"比间隔还慢的模拟 IOCTL"跑 4 线程 × 5 次，断言闸门内并发峰值恒为 1。
+  v0.1.1 的同名测试只断言总耗时，无法发现重叠（已删除该假信号）。
+- **`mode.rs` 注释与实现矛盾**：注释称"撤销时再写一次提交触发即可"，但 `undo` 只回写两个
+  档位字段、不写 `0x767`。改为与实现一致的表述，并明确标注"撤销后固件是否立即重新应用
+  尚未在真机确认"（`docs/protocol/ec-baseline.md` §6）。
+
+### 修复（工程质量）
+
+- `app/src-tauri` 的 `cargo fmt --check` 此前**失败**（9 处），`cargo clippy --all-targets`
+  有 3 个警告（`manual_clamp` ×2、`err().expect()` ×1）→ 全部修掉，两个 crate 现在都是
+  fmt 干净 + clippy 0 warning。
+- 证据台账此前把 `clippy` / `rustfmt` 记成无条件通过，实际只跑过 `core`；
+  现在两处都明确标注作用范围并补上 `app` 的实测结果。
+
+### 优化
+
+- `get_status` 合并 `0x751` 的重复读取（`current()` + `raw_fields()` 各读一次 → 只读一次），
+  每轮轮询少一次 EC 访问，即少 20 ms 延迟。
+
+### 测试
+
+- 核心单测 **44 → 46**（新增闸门重叠检测与进程级单例断言）。
+- 实际执行：`cargo test` 46 passed + 1 doctest；`cargo test --bin mechrevo-max` 4 passed；
+  `cargo test --test ipc_contract` 8 passed；两个 crate 的 `clippy --all-targets` 均 0 warning；
+  两个 crate 的 `fmt --check` 均 exit 0；`cargo build --release` 成功
+  （`mechrevo-max.exe` 4 994 048 B，sha256 `c85a29ea…f33363`）。
+
+### 复审遗留（未在本版处理，已记录）
+
+- `get_status` 单轮约 14 次 IOCTL ≈ 280 ms，全程持有 EC 互斥 → 用户点"切档"最多排队约 300 ms
+  （可用性可接受，但未做真实窗口帧率测量，标"待验证"）。
+- `RestoreGuard` 在 release 下 `Drop` 失败只 `eprintln!`，而 release 无 stderr 去处；
+  应改为写日志文件或前端事件（当前 app 尚未使用守卫，影响面仅限真机测试）。
+- 契约测试的**参数名**仍是手写表，源码解析只覆盖命令名。
+
+---
+
 ## [0.1.1] — 2026-10-24
 
 护栏补丁版：**不新增硬件功能**，只补齐"安全、可信、可回归"的地基。

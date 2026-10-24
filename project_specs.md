@@ -19,7 +19,7 @@
 | 名称 | Mechrevo-Max（机械革命自研控制台） |
 | 形态 | Windows x64 桌面应用（Rust `mechrevo-core` + Tauri v2） |
 | 仓库 | https://github.com/lza6/Mechrevo-Max |
-| 当前版本 | v0.1.1（护栏补丁，已发布） |
+| 当前版本 | v0.1.2（护栏补丁 + 独立复审修复，已发布） |
 | 主分支 HEAD | `1fe2a14`（已推送，与 `origin/main` 一致）；tag `v0.1.1` 已推送 |
 | 规格基线 | `docs/SPEC.md`（安全红线在 §5.1） |
 
@@ -30,7 +30,7 @@
 | # | 里程碑 | 目标状态 | 验收标准 | 证据 | 状态 |
 |---|---|---|---|---|---|
 | M1 | v0.1.0 首个可用版本 | ✅ 已达成 | 核心链路真机验证 + 发布 | tag `v0.1.0`、`mechrevo-max.exe` 4.76 MiB | done |
-| M2 | v0.1.1 护栏补丁 | ✅ 已达成 | P0/P1 全部离线可修项关闭；已推送并发版 | 核心 44 + bin 4 + 契约 8 全绿；`main`=`1fe2a14`；tag `v0.1.1`；[Release](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.1)（asset 4 992 512 B）；证据 `evidence/v0.1.1.json` | done |
+| M2 | v0.1.1 护栏补丁 + v0.1.2 复审修复 | ✅ 已达成 | P0/P1 全部离线可修项关闭；已推送并发版 | 核心 44 + bin 4 + 契约 8 全绿；`main`=`1fe2a14`；tag `v0.1.1`；[Release](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.1)（asset 4 992 512 B）；证据 `evidence/v0.1.1.json` | done |
 | M3 | v0.2.0 可观测性（温度） | **已确认下一站**（Q-01） | 温度读数与外部工具交叉吻合；探测全程限速只读 | 待填 | todo |
 | M4 | v0.2.1 工程化 | 规划 | CI 必绿 + 覆盖率基线 + 打包验证 | 待填 | todo |
 | M5 | v0.3.0 多机型 | blocked | 第二台机型只读可用 + 未知机型安全降级 | 需第二台机器 | blocked |
@@ -60,6 +60,10 @@
 | T-011-12 | 提交寄存器移出快照（原 P2-09） | P2-09 | P2 | **done** | `mode.rs` `MODE_REGS` 2 项；`rollback_point_excludes_commit_register` 单测 |
 | T-011-13 | 契约测试解析前端源码（原 P2-01） | P2-01 | P2 | **done** | `app.js` `IPC` 表 + `parse_ipc_table` / `no_raw_string_command_names_in_frontend` |
 | T-011-14 | 可访问性：焦点可见 / aria-live / reduced-motion（原 P2-04） | P2-04 | P2 | **done** | `style.css` 新增段 + `index.html` role/aria-live |
+| T-011-15 | 闸门改为持锁执行整个 IOCTL（复审 R1） | R1 | P1 | **done** | `AccessThrottle::run()`；`run_never_allows_overlapping_access` 断言峰值并发=1 |
+| T-011-16 | 闸门改为进程级单例（复审 R2） | R2 | P1 | **done** | `ec::throttle::global()`；`global_throttle_is_shared_across_transports` |
+| T-011-17 | 台账 clippy/fmt 标注 scope + 修 app 两处 lint（复审 R3） | R3 | P2 | **done** | 两个 crate 均 fmt 干净、clippy 0 warning |
+| T-011-18 | `mode.rs` 注释与实现对齐（复审 R4） | R4 | P2 | **done** | 注释改为"撤销只回写字段，是否需补提交未验证" |
 
 ---
 

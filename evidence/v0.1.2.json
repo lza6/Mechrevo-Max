@@ -1,0 +1,174 @@
+{
+  "task_id": "v0.1.2",
+  "status": "passed",
+  "timestamp": "2026-10-24T21:05:00+08:00",
+  "scope": "独立复审后的修正：闸门持锁覆盖整个 IOCTL、闸门改进程级单例、补能检测重叠的测试、台账 scope 修正、两处 lint、轮询少一次读、注释与实现对齐",
+  "trigger": "reviewer 子代理给出 CONDITIONAL PASS，提出 R1/R2/R3/R4 四条 Required Changes",
+  "commands_executed": [
+    {
+      "cmd": "cd core && cargo test --offline",
+      "exit_code": 0,
+      "raw_output_tail": "running 46 tests\ntest result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s\n\nrunning 7 tests\ntest result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nrunning 1 test\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    },
+    {
+      "cmd": "cd core && cargo clippy --offline --all-targets",
+      "exit_code": 0,
+      "raw_output_tail": "(无 warning: / error: 行输出)"
+    },
+    {
+      "cmd": "cd core && cargo fmt --check",
+      "exit_code": 0,
+      "raw_output_tail": "(no output) exit=0"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo fmt --check",
+      "exit_code": 0,
+      "raw_output_tail": "(no output) exit=0 —— 修复前为 exit=1（9 处 diff）"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo clippy --offline --all-targets",
+      "exit_code": 0,
+      "raw_output_tail": "(无 warning: / error: 行输出) —— 修复前有 manual_clamp ×2 与 err_expect ×1"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --bin mechrevo-max",
+      "exit_code": 0,
+      "raw_output_tail": "running 4 tests\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    },
+    {
+      "cmd": "cd app/src-tauri && cargo test --offline --test ipc_contract",
+      "exit_code": 0,
+      "raw_output_tail": "running 8 tests\ntest result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    },
+    {
+      "cmd": "cd app/src-tauri && export PATH=\"/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64:$PATH\" && cargo build --release --offline",
+      "exit_code": 0,
+      "raw_output_tail": "   Compiling mechrevo-max v0.1.2 (...)\n    Finished `release` profile [optimized] target(s) in 1m 01s\nc85a29eabc0d2c062cbb6345e4abe518e8e275178f233ebe30f415cd84f33363  4994048",
+      "note": "文档改动后重新构建一次，以下哈希/大小为**最终产物**（首次构建 68d0b432… 已被文档改动作废）"
+    }
+  ],
+  "review_findings_addressed": [
+    {
+      "id": "R1",
+      "severity": "P1",
+      "claim": "AccessThrottle::wait() 在返回时释放锁，真正 IOCTL 在锁外执行 → 单次 IOCTL 慢于 20ms 时两次访问会重叠；同名测试只断言总耗时，发现不了",
+      "fix": "改为 AccessThrottle::run(|| ...)：整个闭包（open + DeviceIoControl + close）持锁执行；间隔从上次访问**结束**计时",
+      "regression_test": "run_never_allows_overlapping_access：4 线程 × 5 次，每次模拟比间隔慢 2 倍的 IOCTL，断言闸门内峰值并发恒为 1"
+    },
+    {
+      "id": "R2",
+      "severity": "P1",
+      "claim": "闸门是 WindowsAcpiTransport 的字段，每条 IPC 命令都 new() → 每条命令首次访问零间隔，新路径可绕过",
+      "fix": "改为进程级单例 ec::throttle::global()（OnceLock），ioctl 统一走它；删除 per-instance 字段与 with_throttle",
+      "regression_test": "global_throttle_is_shared_across_transports：两次取用指针相等"
+    },
+    {
+      "id": "R3",
+      "severity": "P2",
+      "claim": "证据台账把 clippy/fmt 记成无条件通过，实际只跑过 core；app 的 fmt 失败、clippy 3 警告",
+      "fix": "两处标注 scope 改为「core + app 两个 crate」；修掉 app 的 manual_clamp ×2 与 err().expect() ×1；两个 crate 现在均干净"
+    },
+    {
+      "id": "R4",
+      "severity": "P2",
+      "claim": "mode.rs 注释称撤销时「再写一次提交触发即可」，但 undo 实际不写 0x767",
+      "fix": "注释改为与实现一致，并明确标注「撤销后固件是否立即重新应用尚未在真机确认」（ec-baseline §6）"
+    }
+  ],
+  "optimizations": [
+    "get_status 合并 0x751 的重复读取（current() + raw_fields() 各一次 → 只读一次），每轮少一次 EC 访问"
+  ],
+  "tests": [
+    {
+      "name": "core unit tests",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "46 passed"
+    },
+    {
+      "name": "core doctest",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "1 passed"
+    },
+    {
+      "name": "ipc command-layer unit tests",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "4 passed"
+    },
+    {
+      "name": "ipc contract tests",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "8 passed"
+    },
+    {
+      "name": "clippy (core + app)",
+      "type": "lint",
+      "status": "passed",
+      "evidence": "两个包均 0 warning"
+    },
+    {
+      "name": "rustfmt (core + app)",
+      "type": "lint",
+      "status": "passed",
+      "evidence": "两个包均 exit 0"
+    },
+    {
+      "name": "release build",
+      "type": "build",
+      "status": "passed",
+      "evidence": "mechrevo-max.exe 4994048 B"
+    },
+    {
+      "name": "真机硬件集成测试",
+      "type": "integration",
+      "status": "skipped",
+      "evidence": "7 个 #[ignore]；按 docs/SPEC.md §5.1 不执行"
+    },
+    {
+      "name": "GUI E2E",
+      "type": "e2e",
+      "status": "blocked",
+      "evidence": "用户明确禁用真机 UI 自动化"
+    }
+  ],
+  "coverage_summary": {
+    "lines": null,
+    "branches": null,
+    "functions": null,
+    "statements": null
+  },
+  "seams_touched": [
+    "传输层闸门（WindowsAcpiTransport::ioctl ↔ 进程级 AccessThrottle）",
+    "IPC 契约（app.js IPC 表 ↔ main.rs 命令注册）"
+  ],
+  "mock_scenarios_covered": [
+    "slow_ioctl（比限速间隔还慢的访问）",
+    "concurrent_threads（4 线程并发进闸门）",
+    "stuck_write",
+    "failing_read",
+    "panic_path",
+    "lock_poison"
+  ],
+  "browser_validation": {
+    "performed": false,
+    "paths": [],
+    "screenshots": []
+  },
+  "artifact": {
+    "path": "app/src-tauri/target/release/mechrevo-max.exe",
+    "size_bytes": 4994048,
+    "sha256": "c85a29eabc0d2c062cbb6345e4abe518e8e275178f233ebe30f415cd84f33363"
+  },
+  "limitations": [
+    "真机硬件集成测试未执行（按安全策略）",
+    "GUI 运行时路径未验证（用户禁止真机 E2E）",
+    "get_status 单轮约 14 次 IOCTL ≈ 280 ms 且全程持 EC 互斥；未做真实窗口帧率测量（待验证）",
+    "RestoreGuard 在 release 下 Drop 失败仅 eprintln!，无 stderr 去处（当前 app 未使用守卫，影响限真机测试）",
+    "契约测试的参数名仍为手写表，源码解析只覆盖命令名",
+    "覆盖率无工具、无基线",
+    "跨机型未验证；MSI/NSIS 安装包未构建"
+  ]
+}

@@ -1,5 +1,10 @@
 # 审计历史
 
+## 2026-10-24 · v0.1.2 独立复审与修复
+- reviewer 子代理独立跑验证并给出 CONDITIONAL PASS：R1（限速锁未覆盖 IOCTL）、R2（闸门实例级）、R3（台账超范围断言）、R4（注释矛盾）
+- 全部修复并补回归测试（`run_never_allows_overlapping_access` 断言闸门内峰值并发=1）
+- 复审未审查范围：`docs/计划书/*`、`.agent/*`、`tasks/*`、HTML 报告、`tools/publish_release.py`
+
 ## 2026-10-24 · 全量只读复审 + v0.1.1 护栏补丁
 - 范围：全部跟踪文件（65→69），排除 `target/`、`graft/`、`reverse/evidence/*.json`
 - 方法：结构扫描 → 只读验证 → 文档/代码交叉核对 → 4 方案权衡 → 原子任务 → 修复 → 独立审查

@@ -42,7 +42,7 @@
 2. **写后读回校验** —— 默认写入方式
 3. **改动前存回滚点** —— 任何写入前先 `snapshot`，失败自动回滚
 4. **地址标注可信度** —— `Verified` / `CommunityUnverified` / `NotApplicable` 三态，不拿其他机型的地址当本机结论
-5. **访问强制限速** —— 限速在唯一 IOCTL 出口处执行（默认 50 次/秒，硬下限 100 次/秒），新增调用路径也无法绕过
+5. **访问强制限速且不重叠** —— 整个 IOCTL 过程在**进程级**闸门内执行（默认 50 次/秒，硬下限 100 次/秒）：既保证间隔，也保证两次访问不重叠，新建 transport 实例也无法绕过
 6. **回滚守卫** —— 会写硬件的代码路径持有 RAII 守卫，连 panic 展开都会还原（Rust 没有 `finally`）
 7. **访问串行化** —— IPC 层用互斥锁保护 EC，忙时前端暂停轮询，避免并发读写交错
 
@@ -103,7 +103,7 @@ workflow_status.md     工作状态台账
 ```bash
 # 核心库（离线，用 Mock 传输层）
 cd core
-cargo test                                    # 44 单测 + 1 doctest
+cargo test                                    # 46 单测 + 1 doctest
 cargo clippy --all-targets -- -D warnings     # 0 warning
 cargo test --test hardware -- --ignored --test-threads=1 --nocapture   # 真机测试（谨慎）
 

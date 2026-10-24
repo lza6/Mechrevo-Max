@@ -127,7 +127,7 @@
 - C3 所有写入必须经过 `Ec::write_verified` 或显式说明为何不校验
 - C4 寄存器地址必须标注 `AddrStatus`（Verified / CommunityUnverified / NotApplicable）
 - C5 新增公开 API 必须有文档注释（`#![warn(missing_docs)]`）
-- C6 限速必须在**传输层**实现一次（`WindowsAcpiTransport::ioctl`），不得只写在调用层
+- C6 限速与"不重叠"必须在**传输层**实现一次（`WindowsAcpiTransport::ioctl` + 进程级闸门），不得只写在调用层；只 sleep 不持锁不算实现
 - C7 会写真实硬件的代码路径必须持有 `Ec::guard()` 返回的 `RestoreGuard`（保证 panic 也回滚）
 - C8 IPC 命令名必须经前端 `IPC` 契约表调用，由 `ipc_contract.rs` 解析源码双向校验
 
@@ -158,8 +158,10 @@ EC 停摆 → 风扇/温控失控 → 平台硬复位（无 Windows 转储，Eve
 - 所有 EC 访问工具**必须**限速，默认 ≤50 次/秒
 - 代码中硬上限 = 100 次/秒，超出强制夹回，调用方无法绕过
   - Python 工具：`MIN_INTERVAL_S = 0.01`，在各自的 `Ec` 类内部强制执行
-  - Rust 真机路径：`ec::AccessThrottle`，在 `WindowsAcpiTransport::ioctl()`（唯一 IOCTL 出口）执行，
-    默认 20 ms（50 次/秒），硬下限 10 ms（100 次/秒），见 `core/src/ec/throttle.rs`
+  - Rust 真机路径：`ec::AccessThrottle`，由 `WindowsAcpiTransport::ioctl()` 把**整个 IOCTL 过程**
+    包进**进程级**闸门 `ec::throttle::global()` 内执行 —— 默认 20 ms（50 次/秒），
+    硬下限 10 ms（100 次/秒）。同时保证：① 两次访问起点间隔达标；② 两次访问**不重叠**；
+    ③ 新建 transport 实例无法绕过（状态进程共享）。见 `core/src/ec/throttle.rs`
 - **禁止在笔记本上跑 CPU 满载压力测试**（同样会逼近温度墙导致硬复位）
 - 本项目的"压测"定义为：长时**低速**轮询、写入/复原往复、设备掉线恢复、边界值拦截
 

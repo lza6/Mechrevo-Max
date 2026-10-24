@@ -89,8 +89,8 @@ IPC 层只保留无法测试的部分（Tauri 命令注册本身）。
 | **会写硬件的代码路径必须持有 `RestoreGuard`** | Rust 没有 `finally`：断言失败会 panic 展开并跳过后续语句，只有 `Drop` 会执行。守卫让"panic 也回滚"成立 |
 | **寄存器地址标注 `AddrStatus`** | 跨机型地址不通用，必须区分「本机已验证」与「社区未验证」 |
 | **提交寄存器不做读回校验，且不进快照** | `0x0767` 写入后硬件自动清零：校验会误报失败；没有"原始值"可还原，撤销时去写它会执行一次语义不明的命令 |
-| **EC 访问强制限速，且只在传输层实现一次** | 见 `docs/SPEC.md` §5.1。放在 `WindowsAcpiTransport` 的唯一 IOCTL 出口，才能保证新增调用路径无法绕过 |
-| **EC 访问必须串行化** | EC 硬件不支持并发。串行化落在 IPC 层的 `AppState.ec` 互斥上；前端在"忙"期间暂停轮询，避免无谓排队与读数抖动 |
+| **EC 访问强制限速，且只在传输层实现一次** | 见 `docs/SPEC.md` §5.1。闸门必须是**进程级**、且**覆盖整个 IOCTL**（不只是访问前 sleep）——否则单次 IOCTL 慢于间隔时仍会重叠，新建 transport 实例也能绕过 |
+| **EC 访问必须串行化（两层）** | ① 传输层闸门保证两次真实 IOCTL 不重叠；② IPC 层 `AppState.ec` 互斥保证命令之间不交错；③ 前端在"忙"期间暂停轮询。EC 硬件不支持并发，缺任一层都会留下窗口 |
 
 ---
 
@@ -100,7 +100,7 @@ IPC 层只保留无法测试的部分（Tauri 命令注册本身）。
 core/src/
   ec/
     mod.rs          Ec<T>：读写、回滚、位操作；RollbackPoint；RestoreGuard（RAII 回滚）
-    throttle.rs     AccessThrottle：访问间隔下限（默认 50 次/秒，硬下限 10 ms）
+    throttle.rs     AccessThrottle：进程级闸门（间隙 ≥20ms 且访问不重叠；硬下限 10ms）
     transport.rs    EcTransport trait + MockTransport
     windows.rs      WindowsAcpiTransport（IOCTL 封装，含 unsafe）+ 在唯一出口处限速
   control.rs        PowerController：PL1/2/4 读写 + 校验 + 回滚

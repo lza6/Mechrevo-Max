@@ -115,14 +115,10 @@ fn classify(err: &mechrevo_core::Error) -> (&'static str, String) {
             "driver",
             "EC 驱动未就绪。请先执行下方命令，然后重启本程序。".to_owned(),
         ),
-        mechrevo_core::Error::DeviceOpen { source, .. }
-            if source.raw_os_error() == Some(5) =>
-        {
-            (
-                "elevation",
-                "权限不足 —— 访问 EC 需要管理员权限。".to_owned(),
-            )
-        }
+        mechrevo_core::Error::DeviceOpen { source, .. } if source.raw_os_error() == Some(5) => (
+            "elevation",
+            "权限不足 —— 访问 EC 需要管理员权限。".to_owned(),
+        ),
         other => ("driver", other.to_string()),
     }
 }
@@ -188,6 +184,13 @@ fn get_status(state: State<'_, AppState>) -> StatusPayload {
         Err(e) => return unavailable(&e, can_undo_power, can_undo_mode),
     };
 
+    // 档位字段只读一次：`current()` 与 `raw_fields()` 都会读 0x751，
+    // 合并后每轮轮询少一次 EC 访问（20 ms 限速下等于少 20 ms 延迟）。
+    let raw = mode_ctl.raw_fields().ok();
+    let mode_key = raw
+        .and_then(|(field1, _)| OperatingMode::from_field1(field1))
+        .map(OperatingMode::key);
+
     StatusPayload {
         ec: EcStatus::Ready,
         project_id: Some(snap.project_id),
@@ -195,8 +198,8 @@ fn get_status(state: State<'_, AppState>) -> StatusPayload {
         is_ac_powered: Some(snap.is_ac_powered()),
         cpu_fan_rpm: Some(snap.cpu_fan_rpm),
         gpu_fan_rpm: Some(snap.gpu_fan_rpm),
-        mode: mode_ctl.current().ok().flatten().map(|m| m.key()),
-        mode_raw: mode_ctl.raw_fields().ok(),
+        mode: mode_key,
+        mode_raw: raw,
         gaming_power: power_ctl
             .read_defaults(PowerMode::Gaming)
             .ok()
@@ -245,7 +248,10 @@ fn set_mode(state: State<'_, AppState>, mode: String) -> Result<String, String> 
     let change = ctl.switch(target).map_err(|e| e.to_string())?;
     let name = target.display_name().to_owned();
 
-    let mut undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+    let mut undo = state
+        .undo
+        .lock()
+        .map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
     undo.mode = Some(change);
     Ok(format!("已切换到{name}档"))
 }
@@ -271,9 +277,14 @@ fn set_power_limits(
 
     let ec = open_ec().map_err(|e| e.to_string())?;
     let ctl = PowerController::new(&ec);
-    let record = ctl.apply_defaults(target, &limits).map_err(|e| e.to_string())?;
+    let record = ctl
+        .apply_defaults(target, &limits)
+        .map_err(|e| e.to_string())?;
 
-    let mut undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+    let mut undo = state
+        .undo
+        .lock()
+        .map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
     undo.power = Some(record);
     Ok(format!(
         "{}功耗已设为 PL1={} PL2={} PL4={}",
@@ -294,7 +305,10 @@ fn undo_power(state: State<'_, AppState>) -> Result<String, String> {
     let ec = open_ec().map_err(|e| e.to_string())?;
 
     let record = {
-        let undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+        let undo = state
+            .undo
+            .lock()
+            .map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
         undo.power.clone()
     };
     let Some(record) = record else {
@@ -305,7 +319,10 @@ fn undo_power(state: State<'_, AppState>) -> Result<String, String> {
         .undo(&ec)
         .map_err(|e| format!("撤销失败（回滚点已保留，可重试）: {e}"))?;
 
-    let mut undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+    let mut undo = state
+        .undo
+        .lock()
+        .map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
     undo.power = None;
     Ok(format!("已还原 {restored} 个寄存器"))
 }
@@ -317,7 +334,10 @@ fn undo_mode(state: State<'_, AppState>) -> Result<String, String> {
     let ec = open_ec().map_err(|e| e.to_string())?;
 
     let change = {
-        let undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+        let undo = state
+            .undo
+            .lock()
+            .map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
         undo.mode.clone()
     };
     let Some(change) = change else {
@@ -328,7 +348,10 @@ fn undo_mode(state: State<'_, AppState>) -> Result<String, String> {
         .undo(&ec)
         .map_err(|e| format!("撤销失败（回滚点已保留，可重试）: {e}"))?;
 
-    let mut undo = state.undo.lock().map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
+    let mut undo = state
+        .undo
+        .lock()
+        .map_err(|_| "撤销栈异常，请重启程序".to_owned())?;
     undo.mode = None;
     Ok(format!("已还原 {restored} 个寄存器"))
 }
@@ -399,8 +422,8 @@ fn fit_window_to_monitor(app: &mut tauri::App) {
     let origin = monitor.position();
 
     // 目标尺寸取「期望值」与「屏幕 90%」的较小者
-    let w = (f64::from(screen.width) * 0.90).min(1440.0).max(720.0) as u32;
-    let h = (f64::from(screen.height) * 0.90).min(980.0).max(520.0) as u32;
+    let w = (f64::from(screen.width) * 0.90).clamp(720.0, 1440.0) as u32;
+    let h = (f64::from(screen.height) * 0.90).clamp(520.0, 980.0) as u32;
 
     let _ = window.set_size(PhysicalSize::new(w, h));
 
@@ -438,12 +461,14 @@ mod tests {
         let state = AppState::default();
         poison(&state.ec);
 
-        let err = lock_ec(&state).err().expect("锁中毒时必须返回错误");
-        assert_eq!(err.0, "restart", "应给出 restart 提示而不是驱动修复命令");
+        let (hint, message) = match lock_ec(&state) {
+            Ok(_) => panic!("锁中毒时必须返回错误"),
+            Err(pair) => pair,
+        };
+        assert_eq!(hint, "restart", "应给出 restart 提示而不是驱动修复命令");
         assert!(
-            err.1.contains("重启"),
-            "提示文案应告诉用户重启程序，实际: {}",
-            err.1
+            message.contains("重启"),
+            "提示文案应告诉用户重启程序，实际: {message}"
         );
     }
 
@@ -457,8 +482,8 @@ mod tests {
 
     #[test]
     fn lock_ec_serializes_access() {
-        use std::sync::Arc;
         use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
 
         let state = Arc::new(AppState::default());
         let inside = Arc::new(AtomicUsize::new(0));

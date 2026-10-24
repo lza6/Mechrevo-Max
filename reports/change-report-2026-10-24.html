@@ -65,7 +65,7 @@
 <div class="wrap">
 
 <header>
-  <div class="kicker">变更报告 · v0.1.0 → v0.1.1</div>
+  <div class="kicker">变更报告 · v0.1.0 → v0.1.2（含独立复审修复）</div>
   <h1>护栏补丁：让"已验证"这件事本身变得可验证</h1>
   <p class="sub">Mechrevo-Max · 机械革命自研控制台 · 2026-10-24 · 仅离线可验改动，零硬件风险</p>
 </header>
@@ -93,7 +93,7 @@
 
 <h2>3. 做了什么</h2>
 <div class="cards">
-  <div class="card"><div class="num">44</div><div class="lbl">核心单测（原 33，+11）</div></div>
+  <div class="card"><div class="num">46</div><div class="lbl">核心单测（原 33，+13）</div></div>
   <div class="card"><div class="num">8</div><div class="lbl">IPC 契约测试（原 5）</div></div>
   <div class="card"><div class="num">4</div><div class="lbl">新增 IPC 层单测</div></div>
   <div class="card"><div class="num">10</div><div class="lbl">关闭的 P0/P1/P2 缺陷</div></div>
@@ -150,9 +150,9 @@ ioctl()
 <table>
   <thead><tr><th>命令</th><th>结果</th></tr></thead>
   <tbody>
-    <tr><td><code>cd core && cargo test --offline</code></td><td><span class="tag t-ok">已验证</span>44 passed + 1 doctest</td></tr>
-    <tr><td><code>cargo clippy --offline --all-targets</code></td><td><span class="tag t-ok">已验证</span>0 warning</td></tr>
-    <tr><td><code>cargo fmt --check</code></td><td><span class="tag t-ok">已验证</span>exit 0</td></tr>
+    <tr><td><code>cd core && cargo test --offline</code></td><td><span class="tag t-ok">已验证</span>46 passed + 1 doctest</td></tr>
+    <tr><td><code>cargo clippy --all-targets</code>（core + app 两个 crate）</td><td><span class="tag t-ok">已验证</span>两个包均 0 warning</td></tr>
+    <tr><td><code>cargo fmt --check</code>（core + app 两个 crate）</td><td><span class="tag t-ok">已验证</span>两个包均 exit 0（v0.1.1 时 app 为 exit 1，已修）</td></tr>
     <tr><td><code>cargo test --bin mechrevo-max</code></td><td><span class="tag t-ok">已验证</span>4 passed（锁中毒/撤销容错/串行化）</td></tr>
     <tr><td><code>cargo test --test ipc_contract</code></td><td><span class="tag t-ok">已验证</span>8 passed（含源码契约解析）</td></tr>
     <tr><td><code>cargo check --all-targets</code></td><td><span class="tag t-ok">已验证</span>通过（真正编译 <code>main.rs</code>）</td></tr>
@@ -239,8 +239,74 @@ ioctl()
 
 <div class="note ok"><strong>自测记录：</strong>选择题 5/5、判断题 5/5、简答题 4/4 要点齐全（共 14 题 18 项计分点）= <strong>100%</strong>，高于 80% 通过线。测验由本轮实现者自测，不构成独立验收；独立审查见 <code>workflow_status.md</code> 审查区块。</div>
 
+
+<h2>9. 独立复审（v0.1.2）：两次声明只成立一半</h2>
+<p>初版发布后，我启动了一个只读的独立审查代理（不继承我的推理）。它给出 <strong>CONDITIONAL PASS</strong>，
+并指出 v0.1.1 最核心的两条保证其实不成立 —— 这两条都已被它实测确认，不是猜测：</p>
+
+<table>
+  <thead><tr><th>编号</th><th>它指出的问题</th><th>为什么是硬伤</th><th>修复</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>R1（P1）</td>
+      <td><code>AccessThrottle::wait()</code> 在返回时就释放了锁，真正的 <code>DeviceIoControl</code> 在锁外执行</td>
+      <td>只约束了"两次访问的起点间隔"。若单次 IOCTL 本身慢于 20 ms（EC 慢响应、驱动阻塞都属正常），两次访问照样重叠 —— 正是 SPEC §5.1 要禁止的状态。配套测试只断言总耗时，<strong>发现不了重叠</strong></td>
+      <td><code>run(closure)</code>：整个访问（open + IOCTL + close）持锁；间隔从上次<strong>结束</strong>计时</td>
+    </tr>
+    <tr>
+      <td>R2（P1）</td>
+      <td>闸门是 <code>WindowsAcpiTransport</code> 的字段，而每条 IPC 命令都 <code>new()</code> 一个 transport</td>
+      <td>每 <code>new()</code> 一次就得到一份空状态 → 每条命令的<strong>第一次</strong>访问零间隔；未来任何新路径（CLI、脚本、新命令模块）建个 transport 就绕过了。"不可绕过"只在单实例内成立</td>
+      <td>进程级单例 <code>ec::throttle::global()</code>（<code>OnceLock</code>），全进程共享</td>
+    </tr>
+    <tr>
+      <td>R3（P2）</td>
+      <td>证据台账把 <code>clippy</code>/<code>fmt</code> 记成无条件通过，实际只跑过 <code>core</code></td>
+      <td><code>app</code> 的 <code>fmt --check</code> 实测<strong>失败</strong>（9 处），clippy 有 3 个警告 —— 台账断言超出实际范围</td>
+      <td>修掉 3 个 lint（<code>manual_clamp</code>×2、<code>err().expect()</code>×1）+ 全量 fmt；台账标注 scope</td>
+    </tr>
+    <tr>
+      <td>R4（P2）</td>
+      <td><code>mode.rs</code> 新注释称"撤销时再写一次提交触发即可"，但 <code>undo</code> 并不写 <code>0x767</code></td>
+      <td>注释与实现互斥，下一个人会照着注释做错事</td>
+      <td>注释与实现对齐，并标注"撤销后固件是否立即重新应用尚未在真机确认"</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note"><strong>关键收获：</strong>这四条我自己审不出来。R1/R2 的错误来自同一个思维惯性 ——
+"我把限速放进了传输层，所以调用方绕不过"，而事实上"放进传输层"和"覆盖整个访问"、"进程级共享"是三件事。
+自审会沿用同一套假设，独立复审的价值就在这里。因此它被写进了 <code>AGENTS.md</code> 的审查门禁：
+每个版本必须有一次不继承实现者结论的独立审查。</div>
+
+<h3>补上的回归测试（能真正发现重叠）</h3>
+<pre><code>#[test]
+fn run_never_allows_overlapping_access() {
+    // 4 线程 × 5 次，每次模拟"比限速间隔还慢 2 倍"的 IOCTL
+    t.run(|| {
+        let now = inside.fetch_add(1, SeqCst) + 1;
+        peak.fetch_max(now, SeqCst);            // ← 记录闸门内并发峰值
+        thread::sleep(HARD_MIN_INTERVAL * 2);   // ← 慢 IOCTL
+        inside.fetch_sub(1, SeqCst);
+    });
+    assert_eq!(peak.load(SeqCst), 1);           // 旧实现这里会是 2
+}</code></pre>
+<p>顺带做了一件小优化：<code>get_status</code> 里 <code>0x751</code> 被 <code>current()</code> 和
+<code>raw_fields()</code> 各读一次，合并成一次 —— 每轮轮询少一次 EC 访问（少 20 ms）。</p>
+
+<h3>v0.1.2 验证结果</h3>
+<table>
+  <thead><tr><th>命令</th><th>结果</th></tr></thead>
+  <tbody>
+    <tr><td><code>cd core && cargo test</code></td><td><span class="tag t-ok">已验证</span>46 passed + 1 doctest</td></tr>
+    <tr><td><code>cargo test --bin mechrevo-max</code> / <code>--test ipc_contract</code></td><td><span class="tag t-ok">已验证</span>4 passed / 8 passed</td></tr>
+    <tr><td>两个 crate 的 <code>clippy --all-targets</code> + <code>fmt --check</code></td><td><span class="tag t-ok">已验证</span>0 warning / exit 0</td></tr>
+    <tr><td><code>cargo build --release</code></td><td><span class="tag t-ok">已验证</span>4 994 048 B，sha256 <code>c85a29ea…f33363</code></td></tr>
+  </tbody>
+</table>
+
 <footer>
-  生成时间 2026-10-24 · 数据来自 <code>evidence/v0.1.1.json</code> 的真实命令输出 ·
+  生成时间 2026-10-24 · 数据来自 <code>evidence/v0.1.1.json</code> 与 <code>evidence/v0.1.2.json</code> 的真实命令输出 ·
   计划与问题清单见 <code>docs/计划书/下一步改进指南.md</code> · 规则见 <code>AGENTS.md</code>
 </footer>
 

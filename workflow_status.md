@@ -2,7 +2,22 @@
 
 > 只记录事实与证据。最后更新：2026-10-24
 
-## 2026-10-24 · v0.1.1 护栏补丁（本轮）
+## 2026-10-24 · v0.1.2 独立复审修复（本轮收尾）
+
+reviewer 子代理独立验证后给出 **CONDITIONAL PASS**，指出 v0.1.1 两条核心声明只成立一半，
+全部已修复并补回归测试：
+
+| 编号 | 问题 | 修复 | 证据 |
+|---|---|---|---|
+| R1 P1 | `AccessThrottle::wait()` 释放锁后 IOCTL 才执行 → 慢 IOCTL 会重叠 | `run(|| ...)` 整个访问持锁 | `run_never_allows_overlapping_access`（峰值并发=1） |
+| R2 P1 | 闸门 per-instance，每命令首访零间隔、可绕过 | 进程级 `global()` 单例 | `global_throttle_is_shared_across_transports` |
+| R3 P2 | 台账 clippy/fmt 超范围断言；app fmt 失败 + 3 警告 | 修 lint + `cargo fmt`，标注 scope | 两个 crate 均干净 |
+| R4 P2 | `mode.rs` 注释与实现矛盾 | 注释对齐 + 标注未验证 | `mode.rs` 注释 |
+
+验证：`core` 46 + doctest 1；`bin` 4；契约 8；两个 crate fmt/clippy 全绿；
+release exe 4 994 048 B（sha256 `c85a29ea…f33363`）。证据：`evidence/v0.1.2.json`。
+
+## 2026-10-24 · v0.1.1 护栏补丁
 
 **范围**：不新增硬件功能，只补安全与可信地基。任务状态权威源为 `project_specs.md`，
 改进计划为 `docs/计划书/下一步改进指南.md`，证据为 `evidence/v0.1.1.json`。

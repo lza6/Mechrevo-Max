@@ -179,7 +179,8 @@ mod tests {
 
     /// 每个命令的参数名必须逐个匹配（含 camelCase 转换结果）。
     #[test]
-    fn parameter_names_match_with_camel_case_conversion() {        for (name, backend_params) in BACKEND_COMMANDS {
+    fn parameter_names_match_with_camel_case_conversion() {
+        for (name, backend_params) in BACKEND_COMMANDS {
             let frontend_params = FRONTEND_CONTRACT
                 .iter()
                 .find(|(n, _)| n == name)

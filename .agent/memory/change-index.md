@@ -1,5 +1,15 @@
 # 变更索引（文件 → 行为）
 
+## v0.1.2（2026-10-24，独立复审修复）
+| 文件 | 行为变化 |
+|---|---|
+| `core/src/ec/throttle.rs` | `wait()` → `run(closure)`：**整个访问持锁**（保证不重叠 + 间隔）；新增进程级 `global()`（OnceLock）；间隔从上次访问**结束**计时 |
+| `core/src/ec/windows.rs` | `ioctl()` 把 `ioctl_unguarded()` 包进 `global().run()`；删除 per-instance 闸门字段与 `with_throttle` |
+| `core/src/mode.rs` | 注释与实现对齐（撤销只回写字段，不写 `0x0767`），标注"是否需补提交未验证" |
+| `core/src/lib.rs` | crate 文档第 4 条改为"持锁 + 进程级"表述 |
+| `app/src-tauri/src/main.rs` | `get_status` 合并 `0x751` 重复读取；`clamp` 替代 `min/max`；测试去掉 `err().expect()` |
+| 版本 | core / app / tauri.conf 同步 0.1.2 |
+
 ## v0.1.1（2026-10-24）
 | 文件 | 行为变化 |
 |---|---|

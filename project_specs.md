@@ -19,7 +19,7 @@
 | 名称 | Mechrevo-Max（机械革命自研控制台） |
 | 形态 | Windows x64 桌面应用（Rust `mechrevo-core` + Tauri v2） |
 | 仓库 | https://github.com/lza6/Mechrevo-Max |
-| 当前版本 | v0.1.5（护栏 + 复审修复 + 执行线程 + 可观测性/离线/可访问性 + 安装包可构建，已发布） |
+| 当前版本 | v0.2.0（温度读数自行测定上线 + 强冷位修复；已发布） |
 | 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0`、`v0.1.1`、`v0.1.2` |
 | 规格基线 | `docs/SPEC.md`（安全红线在 §5.1） |
 
@@ -31,7 +31,7 @@
 |---|---|---|---|---|---|
 | M1 | v0.1.0 首个可用版本 | ✅ 已达成 | 核心链路真机验证 + 发布 | tag `v0.1.0`、`mechrevo-max.exe` 4.76 MiB | done |
 | M2 | v0.1.1 护栏 + v0.1.2 复审修复 | ✅ 已达成 | P0/P1 全部离线可修项关闭；已推送并发版 | 核心 46 + bin 4 + 契约 8 全绿；tag `v0.1.2`；[Release v0.1.2](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.1.2)（asset 4 994 048 B）；证据 `evidence/v0.1.1.json`、`evidence/v0.1.2.json` | done |
-| M3 | v0.2.0 可观测性（温度） | **已确认下一站**（Q-01） | 温度读数与外部工具交叉吻合；探测全程限速只读 | 待填 | todo |
+| M3 | v0.2.0 可观测性（温度） | ✅ 已达成 | 与 ACPI 热区 / nvidia-smi 交叉吻合（r=0.857/0.989）；探测全程限速只读 | `evidence/v0.2.0.json`；真实 GUI 截图 | done |
 | M4 | v0.2.1 工程化 | 规划 | CI 必绿 + 覆盖率基线 + 打包验证 | 待填 | todo |
 | M5 | v0.3.0 多机型 | blocked | 第二台机型只读可用 + 未知机型安全降级 | 需第二台机器 | blocked |
 | M6 | v0.4.0 产品化 | 规划 | 干净系统按向导走通全链路 | 待填 | todo |
@@ -74,6 +74,9 @@
 | T-020-07 | a11y 4 处修正（label/aria-valuetext/alert 常驻/tabs role） | N3 | P2 | **done** | 47 条浏览器断言含 6 条可访问性；真机读屏播报仍待验证 |
 | T-020-08 | 修 `bundle.icon` 缺 `.ico`，让 msi/nsis 真能构建（关闭 P2-08） | P2-08 | P2 | **done** | CI run 40101956611 package job success；msi 1 990 656 B + nsis 1 362 587 B，已上传 Release |
 | T-020-09 | CI 三 job（verify/coverage/package）+ rust-cache + 固定工具链 | P2-02 | P2 | **done** | run 40101956611 三个 job 全 success |
+| T-020-10 | 温度寄存器自行测定（CPU 0x043E / GPU 0x044F） | P1-04 | **P1** | **done** | r=+0.857 / +0.989；探测工具入库；基线文档 §4.1 |
+| T-020-11 | 修强冷位导致档位识别返回 None | 真机发现 | **P1** | **done** | `from_field1` 屏蔽 bit6；单测 0x40/0x50/0xE0；真机 751=0x40 显示均衡 |
+| T-020-12 | 真实 GUI 端到端验证（启动→EC→UI→截图→停止） | 用户要求 | P1 | **done** | 截图 + 内存 62.6 MB + 日志落盘 |
 
 ---
 

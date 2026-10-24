@@ -65,7 +65,7 @@
 <div class="wrap">
 
 <header>
-  <div class="kicker">变更报告 · v0.1.0 → v0.1.2 + 第三轮工程化验证</div>
+  <div class="kicker">变更报告 · v0.1.0 → v0.2.0（含温度测定与真机 E2E）</div>
   <h1>护栏补丁：让"已验证"这件事本身变得可验证</h1>
   <p class="sub">Mechrevo-Max · 机械革命自研控制台 · 2026-10-24 · 仅离线可验改动，零硬件风险</p>
 </header>
@@ -358,6 +358,62 @@ run <a href="https://github.com/lza6/Mechrevo-Max/actions/runs/40098051184">4009
   <li>CI 里应该把 <code>core/tests/hardware.rs</code> 的 <code>#[ignore]</code> 去掉，让 CI 顺便验证硬件。<details><summary>答案</summary><p><strong>错。</strong>CI 无硬件；且真机写入有硬复位风险（2026-10-17 已发生过一次），必须保持 <code>ignored</code>。</p></details></li>
   <li>测试跑出一堆红色时，第一步应该去改业务代码。<details><summary>答案</summary><p><strong>错。</strong>先验证脚手架（本轮 11 条红全是"同 URL 改 hash 不重载"造成的假象）。</p></details></li>
   <li>"轮询是否停了"这个断言，数 <code>invoke('get_status')</code> 的次数是可靠办法。<details><summary>答案</summary><p><strong>不可靠。</strong>动作结束后的延迟强制刷新会多出一次调用；应直接观察 <code>setInterval</code> 注册表。</p></details></li>
+</ol>
+
+
+<h2>11. 温度寄存器：自己测出来的，不是抄来的</h2>
+<p>社区两份参考实现（<code>roj234/mechrevo_ec_api</code> 的 44 个 <code>REG_</code>、<code>LumaDesk</code> 的
+<code>ec_protocol.py</code>）<strong>都没有温度寄存器</strong>。所以只能自己测。</p>
+
+<div class="note"><strong>方法（不是"数值看起来像温度"）：</strong>
+拿<strong>独立参照</strong>和候选寄存器做相关性比对 —— CPU 用 ACPI 热区
+（<code>Get-Counter '\Thermal Zone Information(*)\Temperature'</code> 的 <code>\_sb.ectz</code>），
+GPU 用 <code>nvidia-smi</code>（走 NVAPI，<strong>不经过 EC</strong>，因此可并发而不抢通道）。</div>
+
+<table>
+  <thead><tr><th>寄存器</th><th>参照</th><th>样本</th><th>Pearson r</th><th>绝对偏差</th><th>结论</th></tr></thead>
+  <tbody>
+    <tr><td><code>0x043E</code></td><td>ACPI 热区</td><td>9 组配对</td><td><strong>+0.857</strong></td><td>≈ +2 °C</td><td>CPU 温度</td></tr>
+    <tr><td><code>0x044F</code></td><td><code>nvidia-smi</code></td><td>80 组并发</td><td><strong>+0.989</strong></td><td>≈ +1 °C</td><td>GPU 温度</td></tr>
+    <tr><td><code>0x060C</code></td><td>ACPI 热区</td><td>9 组</td><td>+0.640</td><td>均值 78</td><td>排除（偏移过大）</td></tr>
+    <tr><td><code>0x03A5</code></td><td>ACPI 热区</td><td>9 组</td><td>+0.390</td><td>33/49/65 跳变</td><td>排除（状态枚举）</td></tr>
+    <tr><td><code>0x0706</code> / <code>0x0D51</code></td><td>—</td><td>—</td><td>0</td><td>恒定</td><td>排除</td></tr>
+  </tbody>
+</table>
+
+<h3>两条踩出来的工程事实</h3>
+<div class="note danger"><strong>1. ACPI 温度轮询会抢同一条 EC 通道。</strong>
+并发跑 <code>MSAcpi_ThermalZoneTemperature</code>（WMI）或 <code>Get-Counter</code> 时，
+直连 EC 的单次读取从 <strong>~20 ms 恶化到 ~1.5 s（慢 75 倍）</strong>。
+我第一次的采样实验就是这样被拖死的（90 组只跑完 12 组）。<br>
+<strong>2. WMI 那个类是冻结的。</strong> 4 分钟内恒为 66.05 °C，而实际温度变化了 5 °C；
+<code>Get-Counter</code> 才是活数据。以后做参照别用 WMI 那个。</div>
+
+<h3>顺带抓到的真机 bug</h3>
+<p>真机读到 <code>0x0751 = 0x40</code> —— bit6 是<strong>强冷位</strong>，和档位编码共用同一字节。
+原来的 <code>from_field1</code> 按整字节匹配 → <code>0x40</code> 匹配不上 → 返回 <code>None</code> → <strong>界面不高亮任何档位</strong>。
+改为先 <code>&amp; 0xBF</code> 屏蔽 bit6；单测覆盖 <code>0x40/0x50/0xE0</code>，并<strong>真机截图确认显示「均衡」</strong>。</p>
+
+<h3>首次真实 GUI 端到端（单次启动，不是反复启停）</h3>
+<div class="cards">
+  <div class="card"><div class="num">72 / 43</div><div class="lbl">CPU / GPU 温度 °C（真实）</div></div>
+  <div class="card"><div class="num">5486 / 5250</div><div class="lbl">CPU / GPU 风扇 RPM</div></div>
+  <div class="card"><div class="num">62.6 MB</div><div class="lbl">进程内存</div></div>
+  <div class="card"><div class="num">751=0x40</div><div class="lbl">强冷态下仍识别为「均衡」</div></div>
+</div>
+<p>截图：<code>docs/screenshots/app-live-window.png</code>。同时确认 release 下
+<code>%LOCALAPPDATA%\Mechrevo-Max\logspp-*.log</code> 真的有内容（release 没有 stderr）。</p>
+
+<h3>本轮新测验（自测 4/4）</h3>
+<ol>
+  <li>温度寄存器可以直接从社区开源实现里抄。
+    <details><summary>答案</summary><p><strong>错。</strong>roj234 与 LumaDesk 都没有温度寄存器；而且 EC 地址跨机型不通用，抄了也可能读错。</p></details></li>
+  <li>只要寄存器数值落在 30–100 之间，就可以判定为温度。
+    <details><summary>答案</summary><p><strong>错。</strong>必须与独立参照做相关性比对；本次 <code>0x03A5</code> 就在 33/49/65 间跳（状态枚举），按范围判会误判。</p></details></li>
+  <li>用 WMI 的 <code>MSAcpi_ThermalZoneTemperature</code> 做持续参照最合适。
+    <details><summary>答案</summary><p><strong>错。</strong>一是本机该值冻结，二是它会抢 EC 通道把读取拖慢 75 倍。</p></details></li>
+  <li><code>0x0751</code> 读到 <code>0x40</code> 说明档位编码变了、需要重新逆向。
+    <details><summary>答案</summary><p><strong>错。</strong>bit6 是强冷位，与档位共用字节；屏蔽后仍是「均衡」。</p></details></li>
 </ol>
 
 <footer>

@@ -24,6 +24,12 @@
 为跑一次冒烟引入 `package.json` + playwright 依赖会破坏该设计，因此断言以规格形式记录，
 执行走 MCP Playwright 或任意具备 Playwright 的环境。这是**已知边界**，不是遗漏。
 
+## 第 5 轮（v0.2.0）：38 条（含温度）
+
+新增温度断言：`66 °C → 偏高`、`47 °C → 正常`、`85 °C → 过热 + is-hot`、`0 °C → 正常`、
+`null → 无数据/—`、5 张读数卡**不溢出**（`scrollHeight/scrollWidth` 断言）、温度提示文案。
+另把相关断言合并精简，故总数从 47 → 38（覆盖面不减）。
+
 ## 第 4 轮增补（v0.1.4）：47 条
 
 新增 6 条可访问性断言（`aria-valuetext` 跟随数值、`label for` 而非包裹、`aria-describedby`、

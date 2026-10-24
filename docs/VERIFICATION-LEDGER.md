@@ -21,7 +21,7 @@
 
 | 项 | 状态 | 证据 | 最后改动 |
 |---|---|---|---|
-| 单元测试（46 个） | ✅ 已验证 | `cargo test` → `46 passed; 0 failed` | 2026-10-24 |
+| 单元测试（49 个） | ✅ 已验证 | `cargo test` → `49 passed; 0 failed` | 2026-10-24 |
 | clippy 全目标（**scope: core + app 两个 crate**） | ✅ 已验证 | `cargo clippy --all-targets` → 两个包均 0 warning | 2026-10-24 |
 | 格式化（**scope: core + app 两个 crate**） | ✅ 已验证 | `cargo fmt --check` → 两个包均 exit 0 | 2026-10-24 |
 | 文档测试 | ✅ 已验证 | `cargo test` → `1 passed`（doctest） | 2026-10-24 |
@@ -92,7 +92,10 @@
 | 功耗写入 + 回滚 | ✅ 已验证 | Office PL1 45→50→回滚→45 |
 | 全量扫描基线 | ✅ 已验证 | 4096 地址、2002 非零（2026-10-16） |
 | EC 健康自检 | ✅ 已验证 | `tools/ec_health.py` → EC 正常，519 次读 0 失败 |
-| 温度寄存器 | ❓ 待验证 | 未确认（见第 5 节） |
+| 温度寄存器 | ✅ 已验证 | `0x043E` CPU（vs ACPI 热区 9 组配对 r=+0.857，偏差≈+2 °C）、`0x044F` GPU（vs nvidia-smi 80 组 r=+0.989，偏差≈+1 °C） | 2026-10-24 |
+| 真实 GUI 端到端 | ✅ 已验证 | 启动真实 exe（单次启动）→ 界面实录 CPU 72 °C / GPU 43 °C / 风扇 5486·5250 RPM / 均衡档高亮 / `751=0x40` 强冷态仍正确识别；内存 62.6 MB；截图 `docs/screenshots/app-live-window.png` | 2026-10-24 |
+| release 日志落盘 | ✅ 已验证 | `%LOCALAPPDATA%\Mechrevo-Max\logspp-*.log` 出现启动行（release 无 stderr） | 2026-10-24 |
+| 强冷位不破坏档位识别 | ✅ 已验证 | 真机 `751=0x40` → 界面正确高亮「均衡」；单测覆盖 0x40/0x50/0xE0 | 2026-10-24 |
 | 压力测试（CPU/GPU 满载、EC 泛洪） | 🚫 禁用 | 曾导致硬复位，见 `docs/SPEC.md` §5.1 |
 
 **真机验证频率建议**：仅在你主动要求且机器空闲时做，优先用 `ec_health.py`（限速只读）。

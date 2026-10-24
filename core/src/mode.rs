@@ -87,9 +87,13 @@ impl OperatingMode {
     }
 
     /// 由档位字段1 的值反推档位.
+    ///
+    /// `0x0751` 的 bit6 是**强冷位**，与档位编码共用同一字节：真机实测读到过
+    /// `0x40`（强冷开 + 均衡档）。因此这里先 `& MODE_MASK` 屏蔽 bit6 再匹配，
+    /// 否则「强冷开着」就会被误判成"未知档位"。
     #[must_use]
     pub const fn from_field1(value: u8) -> Option<Self> {
-        match value {
+        match value & ns::MODE_MASK {
             0x00 => Some(Self::Balance),
             0xA0 => Some(Self::Office),
             0x10 => Some(Self::Turbo),
@@ -210,6 +214,25 @@ mod tests {
             let ec = ec_in(mode);
             assert_eq!(ModeController::new(&ec).current().unwrap(), Some(mode));
         }
+    }
+
+    #[test]
+    fn fan_boost_bit_does_not_break_mode_detection() {
+        // 真机实测读到过 0x40（强冷位 bit6 + 均衡档），必须识别为均衡而不是"未知"
+        assert_eq!(
+            OperatingMode::from_field1(0x40),
+            Some(OperatingMode::Balance)
+        );
+        assert_eq!(OperatingMode::from_field1(0x50), Some(OperatingMode::Turbo)); // 强冷 + 狂暴
+        assert_eq!(
+            OperatingMode::from_field1(0xE0),
+            Some(OperatingMode::Office)
+        ); // 强冷 + 办公
+        assert_eq!(
+            OperatingMode::from_field1(0x77),
+            None,
+            "真正未知的编码仍应返回 None"
+        );
     }
 
     #[test]

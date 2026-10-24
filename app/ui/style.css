@@ -266,7 +266,9 @@ body::before {
    规范保证它不会超出容器宽度 (flex 的 min-width:auto 容易阴魂不散). */
 .readouts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* 卡片数量会增长（温度是后加的）；用 auto-fit 避免固定 3 列把新卡片挤到裁切区 */
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  align-content: start;
   gap: var(--gap-sm);
   min-width: 0;
   overflow: hidden;
@@ -566,3 +568,9 @@ input[type="range"]:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 温度卡状态：偏高用警告色，过热用危险色（与风扇卡的 is-hot 区分开） */
+.readout.is-warm .readout-state { color: var(--warn); }
+.readout.is-hot { border-color: oklch(65% 0.19 26 / .45); }
+.readout.is-hot .readout-state { color: var(--danger); }
+.readout.is-hot .num { color: var(--danger); }

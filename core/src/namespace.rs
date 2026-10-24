@@ -33,6 +33,30 @@ pub struct Reg {
     pub note: &'static str,
 }
 
+/// CPU 温度 (°C).
+///
+/// 判定方式（不是"看着像温度"）：与 ACPI 热区
+/// (`\Thermal Zone Information(*)\Temperature` 的 `\_sb.ectz`) 做配对比对 ——
+/// 9 组配对样本上相关系数 r = +0.857，绝对偏差约 +2 °C；
+/// 且在「单线程升温 40 s → 冷却」实验中同步上升 +5.5 °C、随后回落。
+pub const CPU_TEMP: Reg = Reg {
+    addr: 0x043E,
+    name: "CPU Temperature",
+    status: AddrStatus::Verified,
+    note: "单位 °C；vs ACPI 热区 r=0.857，偏差≈+2；升温/冷却实验同步变化",
+};
+
+/// GPU 温度 (°C).
+///
+/// 判定方式：与 `nvidia-smi --query-gpu=temperature.gpu` 做 80 组并发比对
+/// （NVAPI 不经过 EC，不会抢通道），相关系数 r = +0.989，绝对偏差约 +1 °C。
+pub const GPU_TEMP: Reg = Reg {
+    addr: 0x044F,
+    name: "GPU Temperature",
+    status: AddrStatus::Verified,
+    note: "单位 °C；vs nvidia-smi r=0.989，偏差≈+1；80 组并发样本",
+};
+
 /// 项目标识.
 pub const PROJECT_ID: Reg = Reg {
     addr: 0x0740,
@@ -82,12 +106,18 @@ pub const FAN2_RPM_LOW: Reg = Reg {
 };
 
 /// 运行档位字段 1.
+///
+/// bit6 是**强冷位**，与档位共用该字节：真机实测读到过 `0x40`（强冷开、档位=均衡），
+/// 因此解析档位前必须先把 bit6 屏蔽掉（见 [`MODE_MASK`]）。
 pub const MODE_FIELD_1: Reg = Reg {
     addr: 0x0751,
     name: "Mode Field 1",
     status: AddrStatus::Verified,
-    note: "0x00=均衡 0xA0=办公 0x10=狂暴; bit6 为强冷位。本机三档实测读回一致",
+    note: "0x00=均衡 0xA0=办公 0x10=狂暴; bit6 为强冷位，解析前需 & MODE_MASK",
 };
+
+/// 解析档位时要屏蔽掉的位（bit6 = 强冷）.
+pub const MODE_MASK: u8 = 0xBF;
 
 /// 运行档位字段 2.
 pub const MODE_FIELD_2: Reg = Reg {

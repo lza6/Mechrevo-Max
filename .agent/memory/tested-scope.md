@@ -6,10 +6,10 @@
 | `ec::throttle`（限速+不重叠+进程级） | 单元 | 8 | passed | 2026-10-24 |
 | `ec`（Ec/守卫/快照） | 单元 | 11 | passed | 2026-10-24 |
 | `control`（功耗墙） | 单元 | 6 | passed | 2026-10-24 |
-| `mode`（档位） | 单元 | 8 | passed | 2026-10-24 |
-| `sensors` | 单元 | 6 | passed | 2026-10-24 |
+| `mode`（档位 + 强冷位） | 单元 | 9 | passed | 2026-10-24 |
+| `sensors`（含温度） | 单元 | 8 | passed | 2026-10-24 |
 | `namespace` | 单元 | 3 | passed | 2026-10-24 |
-| 合计（core） | 单元 | 46 | passed | 2026-10-24 |
+| 合计（core） | 单元 | 49 | passed | 2026-10-24 |
 | doctest | 文档 | 1 | passed | 2026-10-24 |
 | `main.rs`（锁/串行化/中毒/无记录路径） | 单元（bin） | 7 | passed | 2026-10-24 |
 | IPC 契约 | 集成 | 8 | passed | 2026-10-24 |

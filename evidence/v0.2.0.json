@@ -1,0 +1,99 @@
+{
+  "task_id": "v0.2.0",
+  "status": "passed",
+  "timestamp": "2026-10-24T23:10:00+08:00",
+  "scope": "温度读数上线（自行测定，非抄录）；修复强冷位导致档位识别失效；新增两只只读探测工具；完成首次真实 GUI 端到端验证",
+  "why_self_measured": "社区两份参考实现（roj234/mechrevo_ec_api 的 44 个 REG_、LumaDesk 的 ec_protocol.py）都没有温度寄存器，本机必须自行测定",
+  "commands_executed": [
+    {
+      "cmd": "cd core && cargo test --offline",
+      "exit_code": 0,
+      "raw_output_tail": "test result: ok. 49 passed; 0 failed; 0 ignored（+3：CPU/GPU 温度读取、温度读失败必须报错、强冷位不破坏档位识别）\ntest result: ok. 0 passed; 0 failed; 7 ignored (hardware)\ntest result: ok. 1 passed (doctest)"
+    },
+    {
+      "cmd": "python -X utf8 -I tools/ec_temp_probe.py scan --csv …（只读，48 次/秒）",
+      "exit_code": 0,
+      "raw_output_tail": "扫描完成: 0x0000-0x0fff 共 4096 地址，成功 4096，失败 0，耗时 84.9s（48 次/秒）。同时 ACPI 参照 66.05 °C（前后一致）"
+    },
+    {
+      "cmd": "python -X utf8 -I tools/ec_temp_correlate.py --addr …（三阶段：静置 60s → 单线程升温 40s → 冷却 60s）",
+      "exit_code": 0,
+      "raw_output_tail": "参照温度 61.85 → 66.85 → 66.85 °C\n地址       A(静置)  B(升温)  C(冷却)   B-A    C-B\n0x060C     78.15    83.65    78.64   +5.50   -5.01\n0x043E     64.35    68.00    67.29   +3.65   -0.71\n0x03A5     44.08    46.54    44.43   +2.46   -2.11\n采样 80 组，读取成功 1840，失败 0"
+    },
+    {
+      "cmd": "冷却衰减实验：9 轮「先读一次 ACPI 参照，再独占采样 12s」，与参照做相关",
+      "exit_code": 0,
+      "raw_output_tail": "参照范围 63.85 - 70.85（变化 7.0 °C）\n  0x043E: 与参照相关系数 r = +0.857  均值 65.8\n  0x060C: r = +0.640  均值 78.3\n  0x03A5: r = +0.390（值在 33/49/65 间跳，是状态枚举不是温度）\n  0x0706/0x0D51: r = 0（恒定）"
+    },
+    {
+      "cmd": "GPU 参照实验：nvidia-smi 并发 80 组（NVAPI 不占 EC）",
+      "exit_code": 0,
+      "raw_output_tail": "GPU 参照范围 45 - 55 °C\n  0x044F: r=+0.989  均值 47.2\n  0x043E: r=+0.591（CPU 温度，受共用散热影响）\n  0x044C/0x060C: r≈+0.13\n=> 0x044F 判定为 GPU 温度，偏差≈+1 °C"
+    },
+    {
+      "cmd": "真实 GUI 端到端：启动 app/src-tauri/target/release/mechrevo-max.exe（单次启动，非反复启停）→ 置前 → 截图 → 停进程",
+      "exit_code": 0,
+      "raw_output_tail": "PID=25644  MainWindowHandle=7801680  DPI=144\nwindow rect: 27,27-1002,718  size 975x691（逻辑像素；物理≈1462x1036）\n进程内存 62.6 MB\n界面实录：EC 已连接 / 项目 ID 16 / CPU 温度 72 °C「偏高」/ GPU 温度 43 °C「正常」/ CPU 风扇 5486 RPM / GPU 风扇 5250 RPM / 供电「适配器（编码 7）」/ 均衡档高亮 / 751=0x40 · 7AB=0x00 / PL 75·75·200 / 状态栏「就绪」\n截图：docs/screenshots/app-live-window.png（另有全屏 app-live-e2e.png）"
+    },
+    {
+      "cmd": "cat %LOCALAPPDATA%\\Mechrevo-Max\\logs\\app-*.log",
+      "exit_code": 0,
+      "raw_output_tail": "[INFO] mechrevo_max: mechrevo-max 0.2.0 启动；日志目录 \"C:\\\\Users\\\\Administrator.DESKTOP-EGNE9ND\\\\AppData\\\\Local\\\\Mechrevo-Max\\\\logs\"（release 无 stderr，日志确实落盘）"
+    },
+    {
+      "cmd": "Playwright(Chromium) 38 条前端断言（含温度三档判定/无数据降级/5 卡不溢出/A11y 复验）",
+      "exit_code": 0,
+      "raw_output_tail": "{\"total\":38,\"failed\":[],\"errors\":[]}"
+    },
+    {
+      "cmd": "两个 crate 的 cargo clippy --all-targets / cargo fmt --check / cargo build --release",
+      "exit_code": 0,
+      "raw_output_tail": "clippy 0 warning；fmt exit 0；release 构建成功 5 130 240 B，sha256 f1971d75…714c2a"
+    }
+  ],
+  "temperature_findings": {
+    "cpu": { "addr": "0x043E", "reference": "ACPI 热区 \\_sb.ectz（Get-Counter）", "samples": 9, "pearson_r": 0.857, "offset_c": "+2", "status": "Verified" },
+    "gpu": { "addr": "0x044F", "reference": "nvidia-smi --query-gpu=temperature.gpu", "samples": 80, "pearson_r": 0.989, "offset_c": "+1", "status": "Verified" }
+  },
+  "engineer_findings": [
+    "ACPI 温度轮询（WMI MSAcpi_ThermalZoneTemperature 与 Get-Counter 皆然）会与直连 EC 抢同一条通道：单次读取从 ~20 ms 恶化到 ~1.5 s（慢 75 倍）。因此参照必须分阶段读，不能并发。",
+    "WMI MSAcpi_ThermalZoneTemperature 在本机读数是冻结的（4 分钟恒为 66.05，期间实际变化 5 °C）；Get-Counter 才是活数据。",
+    "真机读到 0x0751 = 0x40（bit6 强冷开 + 均衡档），原 from_field1 按整字节匹配会返回 None → 界面不高亮任何档位。"
+  ],
+  "files_changed": [
+    "core/src/namespace.rs（CPU_TEMP/GPU_TEMP 登记 + MODE_MASK）",
+    "core/src/sensors.rs（cpu_temp_c/gpu_temp_c + 快照字段 + 2 单测）",
+    "core/src/mode.rs（from_field1 屏蔽强冷位 + 1 单测）",
+    "app/src-tauri/src/main.rs（payload 增加 cpu_temp_c/gpu_temp_c）",
+    "app/ui/index.html / app.js / style.css（两张温度卡 + 三档判定 + 读数区自适应）",
+    "tools/ec_temp_probe.py、tools/ec_temp_correlate.py（新增，只读限速）",
+    "版本三处 → 0.2.0；CHANGELOG 0.2.0 段"
+  ],
+  "tests": [
+    { "name": "core 单测 + doctest", "type": "unit", "status": "passed", "evidence": "49 + 1 passed" },
+    { "name": "IPC 命令层单测", "type": "unit", "status": "passed", "evidence": "12 passed" },
+    { "name": "IPC 契约", "type": "integration", "status": "passed", "evidence": "8 passed" },
+    { "name": "前端浏览器断言", "type": "e2e", "status": "passed", "evidence": "38/38，0 error" },
+    { "name": "真实 GUI 端到端（启动→EC→UI→截图→停止）", "type": "e2e", "status": "passed", "evidence": "docs/screenshots/app-live-window.png；内存 62.6 MB；温度 72/43 °C 与参照吻合" },
+    { "name": "温度 vs ACPI 热区", "type": "integration", "status": "passed", "evidence": "9 组配对，r=+0.857" },
+    { "name": "温度 vs nvidia-smi", "type": "integration", "status": "passed", "evidence": "80 组并发，r=+0.989" },
+    { "name": "clippy / fmt（两 crate）", "type": "lint", "status": "passed", "evidence": "0 warning / exit 0" }
+  ],
+  "coverage_summary": { "lines": 86.56, "branches": null, "functions": 85.94, "statements": null, "note": "沿用 2026-10-24 core 基线；新增温度相关代码已由单测覆盖" },
+  "seams_touched": ["S4 EC 读契约（新增两个地址的读取）", "S5 寄存器地址表（新增 2 项 Verified）", "S8 前端交互（38 条断言）", "S9/S10 发布产物与版本号"],
+  "mock_scenarios_covered": ["temperature_read_ok", "temperature_read_error", "fan_boost_bit_set", "temperature_null", "temperature_hot_boundary"],
+  "browser_validation": {
+    "performed": true,
+    "engine": "Playwright / Chromium（mock 后端）+ 真实窗口截图",
+    "paths": ["温度三档（正常/偏高/过热）、无数据降级、5 卡不溢出、A11y、交互全链路"],
+    "screenshots": ["docs/screenshots/app-live-window.png", "docs/screenshots/app-live-e2e.png", "docs/screenshots/ui-ready.png"]
+  },
+  "artifact": { "path": "app/src-tauri/target/release/mechrevo-max.exe", "size_bytes": 5130240, "sha256": "f1971d7509b9dfbc034c4b3f87775316ec08df3b52de1a482f3f0533ca714c2a" },
+  "limitations": [
+    "温度只在本机（GM6PQ0X）验证；换机型必须重测（地址不通用）",
+    "温度精度为 ±1 °C 级整数、有约 +1~+2 °C 固定偏差；未做长时间漂移标定",
+    "真实 GUI 验证为单次启动 + 截图；未做反复启停或多分辨率矩阵",
+    "真机写入路径（切档/写功耗）的端到端行为仍未在本轮验证（只读了数据）",
+    "安装包在干净机器实装仍未做（用户已明确暂不管）"
+  ]
+}

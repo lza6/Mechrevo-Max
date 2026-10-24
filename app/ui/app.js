@@ -70,6 +70,8 @@ const ui = {
   persistError: el('persist-error'),
   alertLive: el('alert-live'),
   clock: el('clock'),
+  cpuTemp: el('readout-cpu-temp'),
+  gpuTemp: el('readout-gpu-temp'),
   cpu: el('readout-cpu'),
   gpu: el('readout-gpu'),
   power: el('readout-power'),
@@ -248,6 +250,36 @@ function renderReadout(node, rpm) {
   stateEl.textContent = rpm === 0 ? '静止' : hot ? '高转速' : '运转中';
 }
 
+/**
+ * 渲染温度卡。
+ *
+ * @param {HTMLElement} node 卡片元素
+ * @param {number|null|undefined} celsius 温度（°C），无数据传 null
+ * @param {{warm:number, hot:number}} threshold 判定阈值
+ */
+function renderTempReadout(node, celsius, threshold) {
+  const valueEl = node.querySelector('[data-role="value"]');
+  const stateEl = node.querySelector('[data-role="state"]');
+  const noteEl = node.querySelector('[data-role="note"]');
+
+  if (celsius === null || celsius === undefined) {
+    valueEl.textContent = '—';
+    stateEl.textContent = '无数据';
+    noteEl.textContent = '—';
+    node.classList.remove('is-hot');
+    node.classList.remove('is-warm');
+    return;
+  }
+
+  valueEl.textContent = String(celsius);
+  const hot = celsius >= threshold.hot;
+  const warm = !hot && celsius >= threshold.warm;
+  node.classList.toggle('is-hot', hot);
+  node.classList.toggle('is-warm', warm);
+  stateEl.textContent = hot ? '过热' : warm ? '偏高' : '正常';
+  noteEl.textContent = hot ? '建议降低负载或切到更强散热' : warm ? '温度偏高，注意散热' : '温度正常';
+}
+
 function renderPowerReadout(isAc, source) {
   const valueEl = ui.power.querySelector('[data-role="value"]');
   const noteEl = ui.power.querySelector('[data-role="note"]');
@@ -264,6 +296,8 @@ function renderStatus(s) {
   renderEc(s.ec);
   ui.projectId.textContent = fmt(s.project_id);
   renderMode(s.mode);
+  renderTempReadout(ui.cpuTemp, s.cpu_temp_c, { warm: 60, hot: 80 });
+  renderTempReadout(ui.gpuTemp, s.gpu_temp_c, { warm: 60, hot: 80 });
   renderReadout(ui.cpu, s.cpu_fan_rpm);
   renderReadout(ui.gpu, s.gpu_fan_rpm);
   renderPowerReadout(s.is_ac_powered, s.power_source);

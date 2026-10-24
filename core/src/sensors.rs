@@ -13,6 +13,10 @@ pub struct SensorSnapshot {
     pub project_id: u8,
     /// 电源来源原始编码.
     pub power_source: u8,
+    /// CPU 温度 (°C).
+    pub cpu_temp_c: u8,
+    /// GPU 温度 (°C).
+    pub gpu_temp_c: u8,
     /// CPU 风扇转速 (RPM).
     pub cpu_fan_rpm: u16,
     /// GPU 风扇转速 (RPM).
@@ -39,6 +43,26 @@ impl<'a, T: EcTransport> Sensors<'a, T> {
     /// 绑定一个 EC 访问器.
     pub fn new(ec: &'a Ec<T>) -> Self {
         Self { ec }
+    }
+
+    /// 读取 CPU 温度 (°C).
+    ///
+    /// 地址 `0x043E`，判定依据见 [`namespace::CPU_TEMP`]（与 ACPI 热区配对相关 r=0.857）。
+    ///
+    /// # Errors
+    /// 读取失败时返回错误.
+    pub fn cpu_temp_c(&self) -> Result<u8> {
+        self.ec.read(namespace::CPU_TEMP.addr)
+    }
+
+    /// 读取 GPU 温度 (°C).
+    ///
+    /// 地址 `0x044F`，判定依据见 [`namespace::GPU_TEMP`]（与 nvidia-smi 并发相关 r=0.989）。
+    ///
+    /// # Errors
+    /// 读取失败时返回错误.
+    pub fn gpu_temp_c(&self) -> Result<u8> {
+        self.ec.read(namespace::GPU_TEMP.addr)
     }
 
     /// 读取 CPU 风扇转速.
@@ -87,6 +111,8 @@ impl<'a, T: EcTransport> Sensors<'a, T> {
         Ok(SensorSnapshot {
             project_id: self.project_id()?,
             power_source: self.power_source()?,
+            cpu_temp_c: self.cpu_temp_c()?,
+            gpu_temp_c: self.gpu_temp_c()?,
             cpu_fan_rpm: self.cpu_fan_rpm()?,
             gpu_fan_rpm: self.gpu_fan_rpm()?,
         })
@@ -107,6 +133,8 @@ mod tests {
         let t = MockTransport::new();
         t.seed(0x0740, 16); // 项目 ID
         t.seed(0x0490, 7); // 接适配器
+        t.seed(0x043E, 66); // CPU 温度 66 °C（实测同 ACPI 热区同幅变化）
+        t.seed(0x044F, 47); // GPU 温度 47 °C（实测同 nvidia-smi ±1）
         t.seed(0x0464, 0x0F);
         t.seed(0x0465, 0x82); // CPU 风扇 3970 RPM
         t.seed(0x046C, 0x00);
@@ -124,6 +152,24 @@ mod tests {
     fn reads_gpu_fan_rpm_with_swapped_byte_order() {
         let ec = seeded();
         assert_eq!(Sensors::new(&ec).gpu_fan_rpm().unwrap(), 75);
+    }
+
+    #[test]
+    fn reads_cpu_and_gpu_temperature() {
+        let ec = seeded();
+        let sensors = Sensors::new(&ec);
+        assert_eq!(sensors.cpu_temp_c().unwrap(), 66);
+        assert_eq!(sensors.gpu_temp_c().unwrap(), 47);
+    }
+
+    #[test]
+    fn temperature_failure_propagates() {
+        let t = MockTransport::new().with_failing_read(0x043E);
+        let ec = Ec::new(t);
+        assert!(
+            Sensors::new(&ec).cpu_temp_c().is_err(),
+            "读失败必须报错，不得返回 0"
+        );
     }
 
     #[test]
@@ -145,6 +191,8 @@ mod tests {
         let snap = SensorSnapshot {
             project_id: 16,
             power_source: 0,
+            cpu_temp_c: 0,
+            gpu_temp_c: 0,
             cpu_fan_rpm: 0,
             gpu_fan_rpm: 0,
         };

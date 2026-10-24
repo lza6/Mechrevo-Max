@@ -50,9 +50,17 @@ export PATH="/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64:$PATH"
 
 系统上可用的新版：`10.0.22621.0`、`10.0.26100.0`。
 
-### 2.2 必须存在 `icons/icon.ico`
+### 2.2 `icons/icon.ico` 必须存在，**并且必须列进 `bundle.icon`**
 
-缺少时 tauri-build 报 `` icons/icon.ico` not found; required for generating a Windows Resource file ``。
+两件事都要做，缺一件都不行：
+
+1. 文件本身要存在（缺少时 tauri-build 报 `` icons/icon.ico` not found ``）；
+2. 必须在 `tauri.conf.json` 的 `bundle.icon` 数组里列出来。
+
+**2026-10-24 实测教训**：文件一直在，但 `bundle.icon` 只列了两个 PNG ——
+`npx tauri build` 直接报 `Couldn't find a .ico icon` 并失败。也就是说
+配置里写了 `targets: ["msi","nsis"]` 并不代表能打包，**只有 CI 上真跑一次才算验证**
+（现由 tag 触发的 `package` job 保证）。
 
 ### 2.3 前端资源不会自动重嵌入
 
@@ -189,6 +197,8 @@ gh release download v0.1.0 --pattern "mechrevo-max.exe"
 - [ ] `app`: `cargo test --bin mechrevo-max` 全过（IPC 命令层的锁/中毒/串行化单测）
 - [ ] `app`: `cargo test --test ipc_contract` 全过（含对 `app/ui/app.js` IPC 契约表的源码解析）
 - [ ] `app`: `cargo build --release` 成功
+- [ ] **安装包：CI 的 `package` job 在本次 tag 上成功**（artifact 里有 msi 与 nsis），
+      而不是只看 `bundle.targets` 写了什么
 - [ ] 三处版本号已同步（`core/Cargo.toml`、`app/src-tauri/Cargo.toml`、`tauri.conf.json`）
 - [ ] `CHANGELOG.md` 已更新，且文中数字（测试数、工具数、文件数）与事实一致
 - [ ] **文档一致性自检**（新增，防止"改了代码没改文档"）：

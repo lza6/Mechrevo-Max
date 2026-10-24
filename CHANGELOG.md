@@ -89,6 +89,32 @@ WebView2 的 UI（主）线程上同步执行**，而 `get_status` 一轮约 14 
 
 ---
 
+## [0.1.5] — 2026-10-24
+
+**打包配置修复。** CI 的 package job 第一次真跑 `npx tauri build`，立刻暴露了
+「MSI/NSIS 从未构建验证」（P2-08）的真实原因：
+
+```
+failed to bundle project: `Couldn't find a .ico icon`
+```
+
+`bundle.icon` 里只列了两个 PNG，**从未包含 `icons/icon.ico`** —— 也就是说这份配置
+在 Windows 上根本不可能打出安装包。讽刺的是 `docs/DEPLOYMENT.md` §2.2 一直写着
+「必须存在 `icons/icon.ico`」：**文档是对的，配置是错的**，而没有人真跑过一次打包。
+
+### 修复
+
+- `bundle.icon` 补上 `icons/icon128.png`、`icons/icon256.png`、`icons/icon.ico`
+- 发布清单与 `docs/DEPLOYMENT.md` 增加一条：**打包必须在 CI 上真跑一次**（现在由 tag 触发的
+  package job 保证），而不是只看配置里写了 `targets`
+
+### 说明
+
+- 本版**无业务代码改动**；exe 行为与 v0.1.4 一致，改动只在打包资源列表与版本号。
+- v0.1.4 的 exe 仍是有效的绿色版产物；v0.1.5 的意义是让 msi/nsis 真的能生成。
+
+---
+
 ## [Unreleased]
 
 ### 工程化（2026-10-24，无代码改动，故未单独发版）

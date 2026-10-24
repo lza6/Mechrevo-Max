@@ -28,7 +28,7 @@
 | P2-03 | 危险操作无二次确认 | P2 | 仅撤销兜底，且只覆盖最后一次 |
 | P2-06 | 滑块范围双份事实源 | P2 | `control.rs` 常量 vs `index.html` min/max |
 | P2-07 | Mode(2) vs OperatingMode(3) 不对齐 | P2 | "均衡"档用 Gaming 默认值，UI 无独立 tab |
-| P2-08 | MSI/NSIS 从未构建验证 | P2 | 配置声明了 targets，Release 只发过 exe |
+| ~~P2-08~~ | ~~MSI/NSIS 从未构建验证~~ | **已定位（v0.1.5）** | CI package job 首次真跑即失败：`Couldn't find a .ico icon` —— `bundle.icon` 从未包含 `icon.ico`，配置本身不可能打包成功。已修，待 v0.1.5 的 CI 复核 |
 | P2-10 | 与"禁 E2E"策略冲突的脚本仍在 | P2 | `scripts/e2e_ui.ps1`、`scripts/cdp_probe.mjs` |
 | P3-01 | `read_block` 地址回绕 | P3 | `wrapping_add`，跨 0x0FFF 静默环绕 |
 | P3-03 | 缺 `docs/adr/` | P3 | SPEC §9 要求 |

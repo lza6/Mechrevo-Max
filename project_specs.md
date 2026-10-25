@@ -19,8 +19,8 @@
 | 名称 | Mechrevo-Max（机械革命自研控制台） |
 | 形态 | Windows x64 桌面应用（Rust `mechrevo-core` + Tauri v2） |
 | 仓库 | https://github.com/lza6/Mechrevo-Max |
-| 当前版本 | v0.5.2（可靠性复审修复；本地验证通过，发布中） |
-| 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0` ～ `v0.5.1`（v0.5.2 待发布） |
+| 当前版本 | v0.5.2（可靠性复审修复；已创建 Release，CI 进行中） |
+| 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0` ～ `v0.5.2` |
 | 规格基线 | `docs/SPEC.md`（安全红线在 §5.1） |
 
 ---

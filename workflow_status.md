@@ -510,3 +510,8 @@ Office: PowerLimits { pl1: 45, pl2: 45, pl4: 200 }
 - 最终实现是单个 `Command::spawn` + `OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE)` + `AssignProcessToJobObject` + 超时 `TerminateJobObject`。
 - `AssignProcessToJobObject` 失败的根因是缺少 `PROCESS_SET_QUOTA`；补上后真实 4/4 通过。
 - 旧成功清除同命令新失败的问题，用 generation 而不是仅按命令名解决。
+
+### v0.5.2 发布进度
+
+- commit `d9ef361`、tag `v0.5.2` 已推送；Release API 复核 `draft=false`，exe 5,446,144 B，与本地构建一致。
+- CI run 仍在执行；package 产物与 CI 结论待回填。

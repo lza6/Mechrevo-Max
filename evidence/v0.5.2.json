@@ -57,15 +57,60 @@
     "reports/change-report-2026-10-24.html"
   ],
   "tests": [
-    { "name": "core 单测 + doctest", "type": "unit", "status": "passed", "evidence": "70 + 1 passed" },
-    { "name": "app 单测", "type": "unit", "status": "passed", "evidence": "44 passed（含配置锁中毒）" },
-    { "name": "IPC 契约", "type": "integration", "status": "passed", "evidence": "8 passed（含 restore_profiles；返回结构由浏览器验证）" },
-    { "name": "配置原子持久化与恢复", "type": "integration", "status": "passed", "evidence": "11 profiles tests；替换失败原文件逐字节不变；备份恢复" },
-    { "name": "外部进程组边界", "type": "integration", "status": "passed", "evidence": "4/4：正常、cmd+ping 悬挂、超限、持续输出；显式 TerminateJobObject" },
-    { "name": "前端降级与恢复", "type": "e2e", "status": "passed", "evidence": "独立 Chromium + mock IPC，28/28，0 error" },
-    { "name": "独立 reviewer", "type": "integration", "status": "passed", "evidence": "第一轮 Request Changes；修复后 Approve（最小范围）" },
-    { "name": "异常 Windows Job 环境", "type": "integration", "status": "blocked", "evidence": "未模拟安全策略禁止 Job 的环境；失败只按 None 降级" },
-    { "name": "真实 GUI / 硬件写入 / 多机型", "type": "e2e", "status": "blocked", "evidence": "安全策略限制，不以 mock 替代" }
+    {
+      "name": "core 单测 + doctest",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "70 + 1 passed"
+    },
+    {
+      "name": "app 单测",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "44 passed（含配置锁中毒）"
+    },
+    {
+      "name": "IPC 契约",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "8 passed（含 restore_profiles；返回结构由浏览器验证）"
+    },
+    {
+      "name": "配置原子持久化与恢复",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "11 profiles tests；替换失败原文件逐字节不变；备份恢复"
+    },
+    {
+      "name": "外部进程组边界",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "4/4：正常、cmd+ping 悬挂、超限、持续输出；显式 TerminateJobObject"
+    },
+    {
+      "name": "前端降级与恢复",
+      "type": "e2e",
+      "status": "passed",
+      "evidence": "独立 Chromium + mock IPC，28/28，0 error"
+    },
+    {
+      "name": "独立 reviewer",
+      "type": "integration",
+      "status": "passed",
+      "evidence": "第一轮 Request Changes；修复后 Approve（最小范围）"
+    },
+    {
+      "name": "异常 Windows Job 环境",
+      "type": "integration",
+      "status": "blocked",
+      "evidence": "未模拟安全策略禁止 Job 的环境；失败只按 None 降级"
+    },
+    {
+      "name": "真实 GUI / 硬件写入 / 多机型",
+      "type": "e2e",
+      "status": "blocked",
+      "evidence": "安全策略限制，不以 mock 替代"
+    }
   ],
   "coverage_summary": {
     "lines": 86.56,
@@ -74,13 +119,40 @@
     "statements": null,
     "note": "沿用 2026-10-24 core 历史基线，不是本轮重跑；app 新采样/进程路径未统计"
   },
-  "seams_touched": ["S1 IPC 命令与返回形状", "S7 前端 DOM", "S8 前端错误/恢复/确认", "S11 进程超时与 EC 锁边界", "S9/S10 发布待 CI"],
-  "mock_scenarios_covered": ["partial_ec_failure", "profile_corruption", "profile_restore_confirm", "no_battery", "missing_gpu", "missing_memory", "curve_failure", "command_reject_and_accept"],
+  "seams_touched": [
+    "S1 IPC 命令与返回形状",
+    "S7 前端 DOM",
+    "S8 前端错误/恢复/确认",
+    "S11 进程超时与 EC 锁边界",
+    "S9/S10 发布待 CI"
+  ],
+  "mock_scenarios_covered": [
+    "partial_ec_failure",
+    "profile_corruption",
+    "profile_restore_confirm",
+    "no_battery",
+    "missing_gpu",
+    "missing_memory",
+    "curve_failure",
+    "command_reject_and_accept"
+  ],
   "browser_validation": {
     "performed": true,
     "engine": "Playwright / Chromium（独立进程 + mock IPC）",
-    "paths": ["overview", "cooling", "battery", "performance", "advanced", "partial_ec_failure", "profile_restore"],
-    "screenshots": ["docs/screenshots/audit-advanced.png", "docs/screenshots/audit-cooling.png", "docs/screenshots/audit-cooling-error.png"]
+    "paths": [
+      "overview",
+      "cooling",
+      "battery",
+      "performance",
+      "advanced",
+      "partial_ec_failure",
+      "profile_restore"
+    ],
+    "screenshots": [
+      "docs/screenshots/audit-advanced.png",
+      "docs/screenshots/audit-cooling.png",
+      "docs/screenshots/audit-cooling-error.png"
+    ]
   },
   "artifact": {
     "path": "app/src-tauri/target/release/mechrevo-max.exe",
@@ -94,5 +166,21 @@
     "真实 GUI、真机写入、风扇曲线写入、MUX、系统实际生效 PL、干净机实装、长时 soak、多机型未验证",
     "未做 TerminateJobObject 失败的故障注入；只记录失败并返回错误",
     "本轮走过的失败草稿未提交：重复 spawn/错误 Job 绑定均已删除"
-  ]
+  ],
+  "release": {
+    "tag": "v0.5.2",
+    "url": "https://github.com/lza6/Mechrevo-Max/releases/tag/v0.5.2",
+    "draft": false,
+    "assets": [
+      {
+        "name": "mechrevo-max.exe",
+        "size_bytes": 5446144
+      }
+    ],
+    "verified_via": "GitHub API releases/tags/v0.5.2"
+  },
+  "ci": {
+    "status": "in_progress",
+    "note": "等待 verify/coverage/package 全部完成，未提前宣称通过"
+  }
 }

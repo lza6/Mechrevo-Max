@@ -17,6 +17,7 @@ const IPC = {
   undoFanBoost: 'undo_fan_boost',
   readRegisters: 'read_registers',
   listProfiles: 'list_profiles',
+  restoreProfiles: 'restore_profiles',
   saveProfile: 'save_profile',
   deleteProfile: 'delete_profile',
   applyProfile: 'apply_profile',
@@ -565,9 +566,14 @@ function renderStatus(s) {
   renderPerformance(s);
   renderSampleInfo();
 
-  ui.persistError.hidden = !s.last_error;
-  ui.persistError.textContent = s.last_error ? '上次操作失败：' + s.last_error : '';
-  ui.persistError.title = s.last_error || '';
+  ui.persistError.hidden = !s.last_error && !(s.read_warnings && s.read_warnings.length);
+  const warnings = (s.read_warnings && s.read_warnings.length)
+    ? ['部分 EC 数据读取失败：' + s.read_warnings.join('；')]
+    : [];
+  if (s.last_error) warnings.push('上次操作失败：' + s.last_error);
+  const warning = warnings.join('　|　');
+  ui.persistError.textContent = warning;
+  ui.persistError.title = warning;
 }
 
 async function refresh(force = false) {
@@ -710,9 +716,40 @@ function renderProfiles(list) {
 
 async function loadProfiles() {
   try {
-    renderProfiles(await invoke(IPC.listProfiles));
+    const payload = await invoke(IPC.listProfiles);
+    if (payload && payload.kind === 'needs_attention') {
+      ui.profileList.textContent = '';
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = payload.message;
+      if (payload.backup) {
+        const restore = document.createElement('button');
+        restore.className = 'btn subtle';
+        restore.textContent = '从备份恢复';
+        restore.addEventListener('click', doRestoreProfiles);
+        li.appendChild(document.createTextNode(' '));
+        li.appendChild(restore);
+      }
+      ui.profileList.appendChild(li);
+      setStatus(payload.message, 'err');
+      return;
+    }
+    renderProfiles(payload && payload.kind === 'ready' ? payload.profiles : payload);
   } catch (e) {
     setStatus('读取配置失败：' + e, 'err');
+  }
+}
+
+async function doRestoreProfiles() {
+  if (!window.confirm('将从 profiles.json.broken 恢复配置；当前 profiles.json 会先保存为 .bak。确定继续吗？')) return;
+  setBusy(true);
+  try {
+    renderProfiles(await invoke(IPC.restoreProfiles));
+    setStatus('已从备份恢复配置', 'ok');
+  } catch (e) {
+    setStatus('恢复失败：' + e, 'err');
+  } finally {
+    setBusy(false);
   }
 }
 

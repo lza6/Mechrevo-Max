@@ -15,6 +15,11 @@
 //!    命令与参数。测试断言它与后端命令集**完全一致**（不多不少），
 //!    防止出现「前端调了不存在的命令」或「后端命令没人用」。
 //!
+//! **边界**：这些测试只校验命令名与参数，**不自动校验返回结构**。
+//! `list_profiles` 当前返回 `{kind:"ready",profiles:[...]}` 或
+//! `{kind:"needs_attention",message}`，由 `tools/qa_browser.cjs` 的
+//! 正常/损坏场景验证；其它返回结构的覆盖仍需在接缝台账标明。
+//!
 //! 这比静态解析 JS 更可靠：改名会让测试红，而不是悄悄失效。
 
 use std::collections::BTreeSet;
@@ -50,6 +55,7 @@ const BACKEND_COMMANDS: &[(&str, &[&str])] = &[
     ("undo_fan_boost", &[]),
     ("read_registers", &["addrs"]),
     ("list_profiles", &[]),
+    ("restore_profiles", &[]),
     ("save_profile", &["profile"]),
     ("delete_profile", &["name"]),
     ("apply_profile", &["name"]),
@@ -71,6 +77,7 @@ const FRONTEND_CONTRACT: &[(&str, &[&str])] = &[
     ("undo_fan_boost", &[]),
     ("read_registers", &["addrs"]),
     ("list_profiles", &[]),
+    ("restore_profiles", &[]),
     ("save_profile", &["profile"]),
     ("delete_profile", &["name"]),
     ("apply_profile", &["name"]),

@@ -482,3 +482,31 @@ Office: PowerLimits { pl1: 45, pl2: 45, pl4: 200 }
 - 结论：A-04 done（构建/CI/Release）；干净系统安装仍不属于本次 CI 覆盖，保留为独立未验证项。
 - 本轮可以停止的条件：P0/P1 修复并复核、测试/契约/浏览器验证、独立 Approve、文档与记忆同步、CI 与 Release 完成。
 
+## 2026-10-25 · 发布后独立可靠性复审（v0.5.2 候选，进行中）
+
+只读实践检查返回 4 项真实缺陷，不因为 v0.5.1 已发布就忽略：
+
+| 项 | 修复与证据 | 状态 |
+|---|---|---|
+| EC 部分读取失败被 `.ok()` 吞掉 | 字段级 `read_warnings`，有效数据保留；前端警告与下一轮清除已测 | done（待复审） |
+| 配置覆盖可能损坏/静默丢非法项 | 临时文件 + sync_all + Windows 原子替换 + `.bak`；NeedsAttention 禁止覆盖；替换失败注入原文件不变 | done（待复审） |
+| 外部进程管道/回收边界 | 并发排空、输出上限、失败即终止、外层 future 超时、句柄关闭；真实 helper 4/4 | done（待复审） |
+| 任意成功清除其它命令失败 | `(command, message)` 精确归属；A失败→B成功不清错，A重试成功才清除 | done（待复审） |
+
+验证（本轮实际执行）：
+- 应用 **44 passed**（含配置锁中毒）；配置 **11 条**（含替换失败、备份恢复）；真实子进程 **4/4**（含 cmd+ping 的继承 pipe）。
+- 独立 Chromium + mock IPC **28/28**，含部分 EC 失败、配置损坏提示与显式恢复确认；此前的 mock 标志问题已修正，不以它为产品缺陷。
+- 独立 reviewer 第一轮 Request Changes；修复后复验 **Approve**（限定最小范围，不覆盖异常 Windows 环境、真机硬件或真实 GUI）。
+
+边界：
+- 超时/输出超限使用显式 `TerminateJobObject` 结束进程组，真实 cmd+ping 的继承 pipe 用例已验证；未覆盖外部安全软件禁止 Job 的环境，失败按 None 返回。
+- 配置 `.bak` 保留上一份成功配置；未做真实断电实验；读改写已用 `AppState.profiles` 互斥（profiles → ec）。
+- 本轮不开放风扇曲线写入、MUX、系统实际生效 PL、多机型支持。
+
+### 本轮走过的弯路（保留为审计证据）
+
+- 初版超时只杀直接子进程，cmd 被杀但 ping 继承 pipe 仍悬挂；没有满足“有界”。
+- 多次 Job 草稿曾重复 spawn、未真正绑定 pipe/超时，已删除，**未进入提交**。
+- 最终实现是单个 `Command::spawn` + `OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE)` + `AssignProcessToJobObject` + 超时 `TerminateJobObject`。
+- `AssignProcessToJobObject` 失败的根因是缺少 `PROCESS_SET_QUOTA`；补上后真实 4/4 通过。
+- 旧成功清除同命令新失败的问题，用 generation 而不是仅按命令名解决。

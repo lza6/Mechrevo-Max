@@ -1,6 +1,6 @@
 [package]
 name = "mechrevo-core"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
 description = "机械革命 (Mechrevo) 笔记本 EC/硬件控制核心库"
 license = "MIT"

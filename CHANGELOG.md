@@ -4,6 +4,34 @@
 
 ---
 
+## [0.5.2] — 2026-10-25
+
+**可靠性复审修复：进程树超时、配置不丢失、错误不串扰。**
+独立审查先 Request Changes，修复后 Approve；不开放高风险硬件写入。
+
+### 修复
+
+- **EC 部分读取失败可见**：强冷、固件基线、档位、默认功耗、充电上限失败进入本轮 `read_warnings`，不再 `.ok()` 静默；与操作失败同时显示，正常下一轮清除。
+- **外部查询进程树有界**：启动后加入 Windows Job Object（`PROCESS_SET_QUOTA | PROCESS_TERMINATE`），超时或输出超限显式 `TerminateJobObject`，结束继承 pipe 的后代；两个输出线程限 2 MiB。
+- **配置原子持久化**：临时文件 + `sync_all` + Windows 原子替换 + `.bak`；解析/校验失败进入 `needs_attention`，禁止按空列表覆盖；可从 `.broken` 显式恢复；读改写由 `AppState.profiles` 互斥。
+- **错误按调用代次归属**：同命令旧成功不会清除新失败，旧失败不会覆盖新结果；不同命令也不会互相清错。
+- `read_block` 继续禁止越界/环绕；版本与日志目录真实显示。
+
+### 验证
+
+- core **70 单测 + 1 doctest**；app **44 单测**；契约 **8**；两个 crate 严格 clippy/fmt。
+- 配置 **11 条**：首次保存、原子替换、替换失败原文件不变、非法条目进入 NeedsAttention、备份恢复。
+- 真实子进程 **4/4**：正常、cmd+ping 悬挂、输出超限、持续输出；`TerminateJobObject` 让继承 pipe 退出。
+- 浏览器 **28/28**：部分 EC 失败、配置损坏提示、恢复确认、取消不发 IPC、未知值等。
+- 独立 reviewer：Request Changes → 修复 → **Approve**（最小范围复验）。
+
+### 未闭环
+
+- 外部 Job 被系统/安全策略禁止的环境只按失败降级，未覆盖；
+- 干净机实装、真实窗口外观、真实读屏播报、长时 soak、多机型、风扇曲线写入、MUX、系统实际生效 PL。
+
+---
+
 ## [0.5.1] — 2026-10-25
 
 **采样正确性与交付边界修复。** 独立审查先给出 Request Changes，修复后 Approve；

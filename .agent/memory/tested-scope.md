@@ -23,11 +23,13 @@
 | 模块 | 测试类型 | 结果 | 证据 |
 |---|---|---|---|
 | core 全部 | 单元 + doctest | **70 passed + 1 passed** | `RUSTDOC=<rustup 工具链真实路径> cargo test --offline` |
-| app 全部（含采样、配置、日志） | 单元（bin） | **32 passed** | `cargo test --offline --bin mechrevo-max` |
+| app 全部（含采样、配置、日志） | 单元（bin） | **44 passed** | `cargo test --offline --bin mechrevo-max` |
 | IPC 契约 | 集成 | **8 passed** | `cargo test --offline --test ipc_contract` |
 | 采样边界 | fixture | **11 passed** | 无电池/合法磁盘/无效与合法 GPU/温度换算等 |
-| 前端降级与交互 | 独立 Chromium + mock IPC | **21/21，errors=[]** | `node tools/qa_browser.cjs`；非真实硬件验证 |
+| 前端降级与交互 | 独立 Chromium + mock IPC | **28/28，errors=[]** | `node tools/qa_browser.cjs`；非真实硬件验证 |
 | 真机健康 | 只读 smoke | **519 次读取 0 失败** | `tools/ec_health.py`；0x751=0x00；没有写入 |
 | 独立审查 | 静态复核 + 证据 | **Approve** | Request Changes → 温度单位修复 → 复验通过 |
-| 真机写入与窗口外观 | E2E | **blocked** | 遵守禁止真机 UI 自动化；不以 mock 替代 |
+| 独立可靠性复审（v0.5.2） | 最小复验 | **Approve** | 进程组/错误代次/配置恢复 3 项；实际 16 条测试通过 |
+| 配置持久化 | 单元 + 故障注入 | **11 passed** | 原子替换、替换失败不变、非法条目、恢复备份 |
+| 外部进程边界 | 真实子进程 | **4/4** | cmd+ping 继承 pipe、输出超限、持续输出、正常退出 || 真机写入与窗口外观 | E2E | **blocked** | 遵守禁止真机 UI 自动化；不以 mock 替代 |
 | 长时 soak、多机型、干净机实装 | 集成 | **未验证** | 不在本轮声称完成 |

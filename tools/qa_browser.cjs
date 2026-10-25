@@ -34,6 +34,7 @@ const ready = (overrides = {}) => ({
   office_power: { pl1: 45, pl2: 45, pl4: 200 },
   fan_boost: true, firmware_power: { pl1: 75, pl2: 130, pl4: 200, extra: 133 },
   can_undo_power: false, can_undo_mode: false, can_undo_fan_boost: false, last_error: null,
+  read_warnings: [],
   app_version: '0.5.0-test', log_dir: 'C:\\Users\\test\\AppData\\Local\\Mechrevo-Max\\logs',
   limits_meta: { pl1: [5, 200], pl2: [5, 200], pl4: [0, 255] },
   system_slow_stale: false,
@@ -80,6 +81,7 @@ const curveData = {
     window.__curveData = payload.curveData;
     window.__status = payload.status;
     window.__curveFails = false;
+    if (window.__profilesBroken === undefined) window.__profilesBroken = !!payload.brokenProfiles;
     window.__TAURI__ = { core: { invoke: async (cmd, args) => {
       window.__ipcCalls.push({ cmd, args });
       if (cmd === 'get_status') return window.__status;
@@ -88,10 +90,18 @@ const curveData = {
         if (window.__curveFails) throw new Error('EC 驱动未就绪');
         return window.__curveData;
       }
-      if (cmd === 'list_profiles') return [];
+      if (cmd === 'list_profiles') {
+        if (window.__profilesBroken) return { kind: 'needs_attention', message: '配置含非法条目，已保留原文件', backup: 'C:\\Temp\\profiles.json.broken' };
+        return { kind: 'ready', profiles: [] };
+      }
+      if (cmd === 'restore_profiles') {
+        if (!window.__profilesBroken) throw new Error('当前没有损坏配置可恢复');
+        window.__profilesBroken = false;
+        return [{ name: 'restored', pl1: 60, pl2: 45, pl4: 200, fan_boost: false }];
+      }
       return 'ok';
     } } };
-  }, { curveData, status });
+  }, { curveData, status, brokenProfiles: false });
   console.log('[qa] init injected');
   await page.goto(url + '?audit=' + Date.now(), { waitUntil: 'load' });
   console.log('[qa] page loaded');
@@ -167,6 +177,35 @@ const curveData = {
   await page.locator('.nav-item[data-page="monitor"]').click();
   await page.waitForTimeout(2300);
   ok('慢速查询失败显示缓存提示', (await page.locator('#monitor-meta').textContent()).includes('缓存'));
+
+  // 部分 EC 读取失败：其他字段保留，警告必须可见，下一轮正常后清除。
+  await page.evaluate(() => {
+    const s = window.__status;
+    s.read_warnings = ['游戏默认功耗读取失败: mock EC error'];
+    window.__status = s;
+  });
+  await page.waitForTimeout(2300);
+  ok('部分 EC 失败常驻提示', (await page.locator('#persist-error').textContent()).includes('部分 EC 数据读取失败'));
+  await page.evaluate(() => { window.__status.read_warnings = []; });
+  await page.waitForTimeout(2300);
+  ok('部分失败下一轮正常后清除', await page.locator('#persist-error').isHidden());
+
+  // 配置损坏：不能显示为“没有配置”，必须明确需要处理。
+  await page.addInitScript(() => { window.__profilesBroken = true; });
+  await page.locator('.nav-item[data-page="performance"]').click();
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => document.querySelector('#ec-text')?.textContent === 'EC 已连接');
+  await page.waitForFunction(() => document.querySelector('#status-msg')?.textContent.includes('配置含非法条目'));
+  ok('配置损坏明确提示', (await page.locator('#status-msg').textContent()).includes('配置含非法条目'));
+  ok('配置损坏不伪报空列表', !(await page.locator('#profile-list').textContent()).includes('还没有自定义配置'));
+
+  // 恢复入口：确认后才调用恢复命令，不能自动覆盖。
+  ok('损坏配置提供恢复入口', await page.locator('#profile-list button').filter({ hasText: '从备份恢复' }).count() === 1);
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#profile-list button').filter({ hasText: '从备份恢复' }).click();
+  await page.waitForFunction(() => document.querySelector('#status-msg')?.textContent.includes('已从备份恢复配置'));
+  ok('确认后从备份恢复', await page.evaluate(() => window.__ipcCalls.some(c => c.cmd === 'restore_profiles')));
+  ok('恢复后显示恢复的配置', (await page.locator('#profile-list').textContent()).includes('restored'));
 
   const failed = results.filter(r => !r.pass);
   console.log(JSON.stringify({ total: results.length, passed: results.filter(r => r.pass).length, failed, errors, results }, null, 2));

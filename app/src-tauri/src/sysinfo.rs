@@ -270,12 +270,19 @@ impl SysSampler {
 #[cfg(windows)]
 mod imp {
     use super::{BatteryInfo, DeviceInfo, DiskInfo, GpuInfo};
+    use std::io::Read;
     use std::process::{Command, Stdio};
     use std::thread;
     use std::time::{Duration, Instant};
-    use windows_sys::Win32::Foundation::FILETIME;
+    use windows_sys::Win32::Foundation::{CloseHandle, FILETIME, HANDLE};
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
     use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
     use windows_sys::Win32::System::Threading::GetSystemTimes;
+    use windows_sys::Win32::System::Threading::OpenProcess;
 
     fn filetime_to_u64(ft: FILETIME) -> u64 {
         ((ft.dwHighDateTime as u64) << 32) | ft.dwLowDateTime as u64
@@ -321,66 +328,164 @@ mod imp {
     }
 
     const EXTERNAL_TIMEOUT: Duration = Duration::from_secs(15);
+    const MAX_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
 
-    #[cfg(windows)]
-    fn terminate_pid(pid: u32) {
-        use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess};
-        const PROCESS_TERMINATE: u32 = 0x0001;
-        // SAFETY: pid 来自本函数创建的子进程；OpenProcess 只用于请求终止，
-        // 失败时返回空句柄，不调用任何后续 API。这里不持有该句柄以外的资源。
-        unsafe {
-            let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
-            if !handle.is_null() {
-                let _ = TerminateProcess(handle, 1);
+    const PROCESS_TERMINATE: u32 = 0x0001;
+
+    struct JobHandle(HANDLE);
+
+    const PROCESS_SET_QUOTA: u32 = 0x0100;
+
+    impl JobHandle {
+        fn new() -> Option<Self> {
+            // SAFETY: 匿名 Job、默认安全属性。
+            let raw = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+            if raw.is_null() {
+                return None;
             }
+            let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+                BasicLimitInformation: unsafe { std::mem::zeroed() },
+                IoInfo: unsafe { std::mem::zeroed() },
+                ProcessMemoryLimit: 0,
+                JobMemoryLimit: 0,
+                PeakProcessMemoryUsed: 0,
+                PeakJobMemoryUsed: 0,
+            };
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            // SAFETY: info 为栈上有效结构体，长度一致。
+            let ok = unsafe {
+                SetInformationJobObject(
+                    raw,
+                    JobObjectExtendedLimitInformation,
+                    std::ptr::from_mut(&mut info).cast(),
+                    std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                )
+            };
+            (ok != 0).then_some(Self(raw))
+        }
+    }
+
+    impl Drop for JobHandle {
+        fn drop(&mut self) {
+            // SAFETY: 本对象唯一持有 Job 句柄，Drop 只关闭一次。
+            unsafe {
+                let _ = CloseHandle(self.0);
+            }
+        }
+    }
+
+    fn attach_process_to_job(job: HANDLE, pid: u32) -> Option<()> {
+        // SAFETY: pid 来自刚创建的子进程；请求分配与终止权限。
+        let process = unsafe { OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid) };
+        if process.is_null() {
+            log::warn!("打开子进程句柄失败: {}", std::io::Error::last_os_error());
+            return None;
+        }
+        // SAFETY: job 与 process 均为有效句柄。
+        let ok = unsafe { AssignProcessToJobObject(job, process) };
+        if ok == 0 {
+            log::warn!("子进程加入 Job 失败: {}", std::io::Error::last_os_error());
+        }
+        let _ = unsafe { CloseHandle(process) };
+        (ok != 0).then_some(())
+    }
+
+    fn terminate_job_tree(job: HANDLE) {
+        // SAFETY: job 由调用线程持有；显式终止整组进程，释放继承 pipe 的写端。
+        if unsafe { TerminateJobObject(job, 1) } == 0 {
+            log::warn!("终止进程组失败: {}", std::io::Error::last_os_error());
         }
     }
 
     #[cfg(not(windows))]
     fn terminate_pid(_pid: u32) {}
 
+    /// 并发排空一个输出管道；限制总大小，超限即失败。
+    fn read_bounded<R: Read + Send + 'static>(
+        mut reader: R,
+        failed: std::sync::mpsc::Sender<()>,
+    ) -> thread::JoinHandle<Option<Vec<u8>>> {
+        thread::spawn(move || {
+            let mut output = Vec::new();
+            let mut chunk = [0u8; 8192];
+            loop {
+                match reader.read(&mut chunk) {
+                    Ok(0) => return Some(output),
+                    Ok(count) => {
+                        if output.len().saturating_add(count) > MAX_OUTPUT_BYTES {
+                            let _ = failed.send(());
+                            return None;
+                        }
+                        output.extend_from_slice(&chunk[..count]);
+                    }
+                    Err(_) => {
+                        let _ = failed.send(());
+                        return None;
+                    }
+                }
+            }
+        })
+    }
+
     /// 执行只读外部命令，并设置硬超时。
     ///
-    /// 无超时查询不能放在状态轮询或 EC 互斥里：进程卡住会拖住整条状态链。
+    /// stdout/stderr 在进程运行期间并发排空，避免输出填满管道后卡死。
+    /// 超时先终止进程再 wait，保证 pipe 的写端被释放。
     fn run_bounded(program: &str, args: &[&str]) -> Option<std::process::Output> {
+        run_bounded_with_timeout(program, args, EXTERNAL_TIMEOUT)
+    }
+
+    pub(super) fn run_bounded_with_timeout(
+        program: &str,
+        args: &[&str],
+        timeout: Duration,
+    ) -> Option<std::process::Output> {
         let mut child = Command::new(program)
             .args(args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .ok()?;
-        let child_pid = child.id();
-        let deadline = Instant::now() + EXTERNAL_TIMEOUT;
-        loop {
+        let job = JobHandle::new()?;
+        attach_process_to_job(job.0, child.id())?;
+        let deadline = Instant::now() + timeout;
+        let (failed_sender, failure_receiver) = std::sync::mpsc::channel();
+        let stdout = read_bounded(child.stdout.take()?, failed_sender.clone());
+        let stderr = read_bounded(child.stderr.take()?, failed_sender.clone());
+
+        let mut completed = false;
+        while Instant::now() < deadline {
+            if failure_receiver.try_recv().is_ok() {
+                log::warn!("外部查询输出超过上限或读取失败: {program}");
+                break;
+            }
             match child.try_wait() {
                 Ok(Some(_)) => {
-                    return match child.wait_with_output() {
-                        Ok(output) => Some(output),
-                        Err(e) => {
-                            log::warn!("回收外部查询失败 {program}: {e}");
-                            terminate_pid(child_pid);
-                            None
-                        }
-                    };
+                    completed = true;
+                    break;
                 }
-                Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(50)),
-                Ok(None) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    log::warn!(
-                        "外部查询超时（{} 秒）: {program}",
-                        EXTERNAL_TIMEOUT.as_secs()
-                    );
-                    return None;
-                }
-                Err(e) => {
-                    log::warn!("查询进程状态失败 {program}: {e}");
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return None;
+                Ok(None) => thread::sleep(Duration::from_millis(20)),
+                Err(error) => {
+                    log::warn!("查询子进程状态失败 {program}: {error}");
+                    break;
                 }
             }
         }
+        if !completed {
+            log::warn!("外部查询超时，终止整个进程组: {program}");
+            terminate_job_tree(job.0);
+        }
+        let status = child.wait().ok()?;
+        if !completed {
+            return None;
+        }
+        let stdout = stdout.join().ok().flatten()?;
+        let stderr = stderr.join().ok().flatten()?;
+        Some(std::process::Output {
+            status,
+            stdout,
+            stderr,
+        })
     }
 
     /// `nvidia-smi` 的 CSV 行解析器。任一字段异常都返回 `None`，不以 0 填充。
@@ -673,6 +778,64 @@ mod tests {
         assert_eq!(gpu.util_pct, 4);
         assert_eq!(gpu.temp_c, 40);
         assert_eq!(gpu.power_w, 5.91);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn bounded_query_returns_for_normal_child() {
+        let out =
+            imp::run_bounded_with_timeout("cmd.exe", &["/C", "echo hello"], Duration::from_secs(5))
+                .expect("正常子进程应返回");
+        assert!(String::from_utf8_lossy(&out.stdout).contains("hello"));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn bounded_query_kills_silent_hanging_child() {
+        let start = std::time::Instant::now();
+        let result = imp::run_bounded_with_timeout(
+            "cmd.exe",
+            &["/C", "ping 127.0.0.1 -n 8 >nul"],
+            Duration::from_millis(300),
+        );
+        assert!(result.is_none(), "悬挂子进程必须按超时失败");
+        assert!(start.elapsed() < Duration::from_secs(6), "不能永久等待");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn bounded_query_rejects_excessive_output_without_deadlock() {
+        let start = std::time::Instant::now();
+        let result = imp::run_bounded_with_timeout(
+            "powershell.exe",
+            &[
+                "-NoProfile",
+                "-Command",
+                "1..70000 | ForEach-Object { '0123456789abcdef0123456789abcdef' }",
+            ],
+            Duration::from_secs(10),
+        );
+        assert!(
+            result.is_none(),
+            "超过输出上限应失败，不得无限等待或无限增长"
+        );
+        assert!(start.elapsed() < Duration::from_secs(15));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn bounded_query_stops_pipe_filling_output() {
+        let result = imp::run_bounded_with_timeout(
+            "powershell.exe",
+            &[
+                "-NoProfile",
+                "-Command",
+                "1..50 | ForEach-Object { '0123456789abcdef' }",
+            ],
+            Duration::from_secs(5),
+        )
+        .expect("持续输出但未超上限时应完成");
+        assert!(!result.stdout.is_empty());
     }
 
     /// 真机冒烟：只保证「跑得通、不 panic」，不对具体硬件下断言。

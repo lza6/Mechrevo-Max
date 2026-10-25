@@ -19,8 +19,8 @@
 | 名称 | Mechrevo-Max（机械革命自研控制台） |
 | 形态 | Windows x64 桌面应用（Rust `mechrevo-core` + Tauri v2） |
 | 仓库 | https://github.com/lza6/Mechrevo-Max |
-| 当前版本 | v0.5.1（采样与降级修复；已发布，CI 三 job 全绿） |
-| 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0` ～ `v0.5.1` |
+| 当前版本 | v0.5.2（可靠性复审修复；本地验证通过，发布中） |
+| 主分支 HEAD | 见 `git log -1`（本文档自身提交后哈希会滞后一格，因此不写死）；已推送的 tag：`v0.1.0` ～ `v0.5.1`（v0.5.2 待发布） |
 | 规格基线 | `docs/SPEC.md`（安全红线在 §5.1） |
 
 ---
@@ -148,3 +148,7 @@
 | T-051-03 | 前端降级、危险确认、范围单一事实源、诊断字段 | 用户审计 | P1 | **done** | `tools/qa_browser.cjs` 21/21；取消不发 IPC、确认才发 |
 | T-051-04 | 历史文档纠偏、归档、技能/记忆补齐 | 用户审计 | P2 | **done** | 39 个已跟踪 md 审计；仅历史单轮审计备份归档，manifest 有回滚 |
 | T-051-05 | v0.5.1 构建、CI、Release | 用户授权发布 | P1 | **done** | CI run 40133863688 三 job 全 success；Release `draft=false`，exe 5 395 456 B、MSI 2 088 960 B、NSIS 1 441 207 B 已上传 |
+| T-052-01 | EC 部分失败可见 + 命令代次防串错 | 独立可靠性复审 | P1 | **done** | `read_warnings` 字段级警告；generation 防旧结果覆盖新失败；单测+浏览器验证 |
+| T-052-02 | 配置原子持久化、显式恢复、读改写互斥 | 独立可靠性复审 | P1 | **done** | 11 profiles 测试；替换失败原文件不变；.broken 恢复确认；`AppState.profiles` |
+| T-052-03 | 外部进程组有界回收 | 独立可靠性复审 | P1 | **done** | Job Object + 显式 `TerminateJobObject`；真实 cmd+ping 继承 pipe 4/4 |
+| T-052-04 | v0.5.2 构建、CI、Release | 用户授权发布 | P1 | **doing** | 本地 release 5 446 144 B，sha256 `8935faff…1a65`；CI/Release 待回填 |

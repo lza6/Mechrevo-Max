@@ -1,5 +1,15 @@
 # 变更索引（文件 → 行为）
 
+## v0.5.2（2026-10-25，可靠性复审）
+| 文件 | 行为变化 |
+|---|---|
+| `main.rs` | EC 部分读取失败进入 `read_warnings`；命令错误按 command+generation 归属；配置锁 profiles→ec；版本/日志/恢复命令 |
+| `sysinfo.rs` | 启动即加入 Job Object（PROCESS_SET_QUOTA），超时/输出超限显式 TerminateJobObject；输出并发排空与 2 MiB 上限 |
+| `profiles.rs` | 配置临时文件+sync_all+原子替换+备份；损坏 NeedsAttention；I/O 区分；显式恢复 |
+| `app/ui/app.js` | 同时显示部分读取警告与操作失败；损坏配置恢复按钮与确认 |
+| `tools/qa_browser.cjs` | 28 条浏览器验收；恢复确认与部分失败场景 |
+
+
 ## v0.5.1（2026-10-25，采样与交付边界修复）
 | 文件 | 行为变化 |
 |---|---|

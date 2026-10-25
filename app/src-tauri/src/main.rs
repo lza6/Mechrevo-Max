@@ -47,34 +47,77 @@ struct AppState {
     /// 此前失败只写进状态栏，下一次轮询就把文案冲掉，用户回头看不出发生过什么。
     /// 这里在成功操作时清空、失败时保留，由 `get_status` 回放给前端（回放而非一次性
     /// `emit`：事件在监听未注册或窗口已销毁时会直接丢失，Tauri 不做重放）。
-    last_error: Mutex<Option<String>>,
+    last_error: Mutex<Option<OperationError>>,
+    /// 每条命令的调用代次；旧请求的迟到结果不得覆盖新请求.
+    operation_generation: std::sync::atomic::AtomicU64,
+    /// 串行化配置的读-改-写，避免并发保存/删除覆盖彼此的更新.
+    profiles: Mutex<()>,
 }
 
-/// 记录一次失败原因（锁中毒时静默忽略，不能让"记录错误"本身再炸一次）.
-fn record_error(state: &AppState, message: &str) {
-    if let Ok(mut slot) = state.last_error.lock() {
-        *slot = Some(message.to_owned());
-    }
-    log::warn!("操作失败: {message}");
-}
-
-/// 成功后清空失败原因.
-fn clear_last_error(state: &AppState) {
-    if let Ok(mut slot) = state.last_error.lock() {
-        *slot = None;
-    }
+/// 一条带调用代次的错误：用于阻止旧请求的迟到结果清除新失败.
+#[derive(Clone)]
+struct OperationError {
+    command: &'static str,
+    generation: u64,
+    message: String,
 }
 
 /// 读出当前失败原因（供 `get_status` 回放）.
 fn last_error(state: &AppState) -> Option<String> {
-    state.last_error.lock().ok().and_then(|slot| slot.clone())
+    state.last_error.lock().ok().and_then(|slot| {
+        slot.as_ref()
+            .map(|error| format!("[{}] {}", error.command, error.message))
+    })
 }
 
-/// 统一处理命令结果：成功清空、失败记录.
-fn note_result(state: &AppState, result: &Result<String, String>) {
+/// 分配一次调用代次；每个异步命令在开始时获取，结果回来时携带它.
+fn next_generation(state: &AppState) -> u64 {
+    state
+        .operation_generation
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        + 1
+}
+
+fn lock_profiles(state: &AppState) -> Result<std::sync::MutexGuard<'_, ()>, String> {
+    state
+        .profiles
+        .lock()
+        .map_err(|_| "配置状态异常，请重启程序后再修改配置".to_owned())
+}
+
+/// 统一处理命令结果：仅允许**同代调用**更新自己的错误状态。
+fn note_result(
+    state: &AppState,
+    command: &'static str,
+    generation: u64,
+    result: &Result<String, String>,
+) {
+    let Ok(mut slot) = state.last_error.lock() else {
+        return;
+    };
     match result {
-        Ok(_) => clear_last_error(state),
-        Err(message) => record_error(state, message),
+        Ok(_) => {
+            if slot
+                .as_ref()
+                .is_some_and(|error| error.command == command && error.generation == generation)
+            {
+                *slot = None;
+            }
+        }
+        Err(message) => {
+            // 不允许旧请求的迟到失败覆盖更新的结果。
+            let should_record = slot
+                .as_ref()
+                .is_none_or(|error| error.command != command || error.generation < generation);
+            if should_record {
+                *slot = Some(OperationError {
+                    command,
+                    generation,
+                    message: message.clone(),
+                });
+                log::warn!("[{command} #{generation}] 操作失败: {message}");
+            }
+        }
     }
 }
 
@@ -144,6 +187,8 @@ struct StatusPayload {
     app_version: &'static str,
     /// 日志目录，供用户排障.
     log_dir: String,
+    /// 当前轮次 EC 部分读取警告（不会跨轮次隐藏新错误）.
+    read_warnings: Vec<String>,
     /// 上一次失败的原因（成功后清空）.
     last_error: Option<String>,
 }
@@ -246,6 +291,7 @@ fn unavailable_with(
         can_undo_power,
         can_undo_mode,
         can_undo_fan_boost: false,
+        read_warnings: Vec::new(),
         system: sysinfo::SysSnapshot::default(),
         limits_meta: limits_meta(),
         system_slow_stale: false,
@@ -304,26 +350,46 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
 
     // 档位字段只读一次：`current()` 与 `raw_fields()` 都会读 0x751，
     // 合并后每轮轮询少一次 EC 访问（20 ms 限速下等于少 20 ms 延迟）。
-    // 电池百分比：容量与电压都可信时才计算；缺字段一律保持 None。
+    // 部分字段失败时必须可见；有效字段继续展示，不能把整页判为不可用。
+    let mut read_warnings = Vec::new();
+
+    // EC 里的充电上限（0x7B9，低 7 位为百分比）——只读；失败也要留痕。
     if let Some(b) = system.battery.as_mut() {
         if b.full_mwh > 0 {
             b.percent = battery_percent(b);
         }
-        // EC 里的充电上限（0x7B9，低 7 位为百分比）——只读；读不到就不显示
-        if let Ok(raw) = ec.read(0x07B9) {
-            let pct = raw & 0x7F;
-            if (1..=100).contains(&pct) {
-                b.charge_limit_pct = Some(pct);
+        match ec.read(0x07B9) {
+            Ok(raw) => {
+                let pct = raw & 0x7F;
+                if (1..=100).contains(&pct) {
+                    b.charge_limit_pct = Some(pct);
+                }
             }
+            Err(error) => read_warnings.push(format!("充电上限读取失败: {error}")),
         }
     }
 
-    let fan_boost = mode_ctl.fan_boost().ok();
-    let firmware_power = power_ctl
-        .read_firmware_baseline()
-        .ok()
-        .map(FirmwarePowerDto::from);
-    let raw = mode_ctl.raw_fields().ok();
+    let fan_boost = match mode_ctl.fan_boost() {
+        Ok(value) => Some(value),
+        Err(error) => {
+            read_warnings.push(format!("强冷位读取失败: {error}"));
+            None
+        }
+    };
+    let firmware_power = match power_ctl.read_firmware_baseline() {
+        Ok(value) => Some(FirmwarePowerDto::from(value)),
+        Err(error) => {
+            read_warnings.push(format!("固件功耗基线读取失败: {error}"));
+            None
+        }
+    };
+    let raw = match mode_ctl.raw_fields() {
+        Ok(value) => Some(value),
+        Err(error) => {
+            read_warnings.push(format!("档位字段读取失败: {error}"));
+            None
+        }
+    };
     let mode_key = raw
         .and_then(|(field1, _)| OperatingMode::from_field1(field1))
         .map(OperatingMode::key);
@@ -339,16 +405,23 @@ fn status_snapshot(state: &AppState) -> StatusPayload {
         gpu_fan_rpm: Some(snap.gpu_fan_rpm),
         mode: mode_key,
         mode_raw: raw,
-        gaming_power: power_ctl
-            .read_defaults(PowerMode::Gaming)
-            .ok()
-            .map(PowerLimitsDto::from),
-        office_power: power_ctl
-            .read_defaults(PowerMode::Office)
-            .ok()
-            .map(PowerLimitsDto::from),
+        gaming_power: match power_ctl.read_defaults(PowerMode::Gaming) {
+            Ok(value) => Some(PowerLimitsDto::from(value)),
+            Err(error) => {
+                read_warnings.push(format!("游戏默认功耗读取失败: {error}"));
+                None
+            }
+        },
+        office_power: match power_ctl.read_defaults(PowerMode::Office) {
+            Ok(value) => Some(PowerLimitsDto::from(value)),
+            Err(error) => {
+                read_warnings.push(format!("办公默认功耗读取失败: {error}"));
+                None
+            }
+        },
         fan_boost,
         firmware_power,
+        read_warnings,
         system,
         limits_meta: limits_meta(),
         system_slow_stale: state.sampler.slow_is_stale(),
@@ -583,7 +656,12 @@ fn read_registers_now(state: &AppState, addrs: &[u16]) -> Result<Vec<RegReading>
 /// 「默认功耗」可写；如果以后确认了别的模式也有独立寄存器，再扩展。
 fn apply_profile_now(state: &AppState, name: &str) -> Result<String, String> {
     let dir = logging::data_dir();
-    let list = profiles::load_profiles(&dir);
+    let list = match profiles::load_profiles(&dir) {
+        profiles::ProfileLoad::Ready(list) => list,
+        profiles::ProfileLoad::NeedsAttention { message, backup: _ } => {
+            return Err(format!("配置需要先处理，未应用任何改动：{message}"));
+        }
+    };
     let profile = list
         .iter()
         .find(|p| p.name == name)
@@ -591,6 +669,7 @@ fn apply_profile_now(state: &AppState, name: &str) -> Result<String, String> {
         .ok_or_else(|| format!("找不到配置「{name}」"))?;
     profile.validate().map_err(|e| e.to_string())?;
 
+    let _profiles_guard = lock_profiles(state)?;
     let limits =
         PowerLimits::new(profile.pl1, profile.pl2, profile.pl4).map_err(|e| e.to_string())?;
     let _guard = lock_ec(state).map_err(|(_, message)| message)?;
@@ -758,10 +837,11 @@ async fn set_mode(state: SharedState<'_>, mode: String) -> Result<String, String
     let target = OperatingMode::from_key(&mode).ok_or_else(|| format!("未知档位: {mode}"))?;
     let worker_state = Arc::clone(state.inner());
     let recorder = Arc::clone(state.inner());
+    let generation = next_generation(state.inner());
     let result = tauri::async_runtime::spawn_blocking(move || switch_mode(&worker_state, target))
         .await
         .map_err(join_error)?;
-    note_result(&recorder, &result);
+    note_result(&recorder, "set_mode", generation, &result);
     result
 }
 
@@ -783,12 +863,13 @@ async fn set_power_limits(
 
     let worker_state = Arc::clone(state.inner());
     let recorder = Arc::clone(state.inner());
+    let generation = next_generation(state.inner());
     let result = tauri::async_runtime::spawn_blocking(move || {
         apply_power_limits(&worker_state, target, limits)
     })
     .await
     .map_err(join_error)?;
-    note_result(&recorder, &result);
+    note_result(&recorder, "set_power_limits", generation, &result);
     result
 }
 
@@ -797,10 +878,11 @@ async fn set_power_limits(
 async fn undo_power(state: SharedState<'_>) -> Result<String, String> {
     let worker_state = Arc::clone(state.inner());
     let recorder = Arc::clone(state.inner());
+    let generation = next_generation(state.inner());
     let result = tauri::async_runtime::spawn_blocking(move || undo_power_now(&worker_state))
         .await
         .map_err(join_error)?;
-    note_result(&recorder, &result);
+    note_result(&recorder, "undo_power", generation, &result);
     result
 }
 
@@ -809,10 +891,11 @@ async fn undo_power(state: SharedState<'_>) -> Result<String, String> {
 async fn undo_mode(state: SharedState<'_>) -> Result<String, String> {
     let worker_state = Arc::clone(state.inner());
     let recorder = Arc::clone(state.inner());
+    let generation = next_generation(state.inner());
     let result = tauri::async_runtime::spawn_blocking(move || undo_mode_now(&worker_state))
         .await
         .map_err(join_error)?;
-    note_result(&recorder, &result);
+    note_result(&recorder, "undo_mode", generation, &result);
     result
 }
 
@@ -829,10 +912,11 @@ async fn relaunch_elevated() -> Result<(), String> {
 async fn set_fan_boost(state: SharedState<'_>, enabled: bool) -> Result<String, String> {
     let worker = Arc::clone(state.inner());
     let recorder = Arc::clone(state.inner());
+    let generation = next_generation(state.inner());
     let result = tauri::async_runtime::spawn_blocking(move || set_fan_boost_now(&worker, enabled))
         .await
         .map_err(join_error)?;
-    note_result(&recorder, &result);
+    note_result(&recorder, "set_fan_boost", generation, &result);
     result
 }
 
@@ -841,10 +925,11 @@ async fn set_fan_boost(state: SharedState<'_>, enabled: bool) -> Result<String, 
 async fn undo_fan_boost(state: SharedState<'_>) -> Result<String, String> {
     let worker = Arc::clone(state.inner());
     let recorder = Arc::clone(state.inner());
+    let generation = next_generation(state.inner());
     let result = tauri::async_runtime::spawn_blocking(move || undo_fan_boost_now(&worker))
         .await
         .map_err(join_error)?;
-    note_result(&recorder, &result);
+    note_result(&recorder, "undo_fan_boost", generation, &result);
     result
 }
 
@@ -860,21 +945,69 @@ async fn read_registers(
         .map_err(join_error)?
 }
 
+/// 配置加载的 IPC 形状：可读列表，或需要用户先修复文件的明确错误.
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum ProfilesPayload {
+    Ready {
+        profiles: Vec<Profile>,
+    },
+    NeedsAttention {
+        message: String,
+        backup: Option<std::path::PathBuf>,
+    },
+}
+
 /// 列出已保存的自定义配置.
 #[tauri::command]
-async fn list_profiles() -> Vec<Profile> {
+async fn list_profiles(state: SharedState<'_>) -> Result<ProfilesPayload, String> {
     let dir = logging::data_dir();
-    tauri::async_runtime::spawn_blocking(move || profiles::load_profiles(&dir))
-        .await
-        .unwrap_or_default()
+    let profiles_state = Arc::clone(state.inner());
+    let payload = match tauri::async_runtime::spawn_blocking(move || {
+        let _guard = lock_profiles(&profiles_state)?;
+        Ok::<_, String>(profiles::load_profiles(&dir))
+    })
+    .await
+    .map_err(join_error)?
+    {
+        Ok(profiles::ProfileLoad::Ready(profiles)) => ProfilesPayload::Ready { profiles },
+        Ok(profiles::ProfileLoad::NeedsAttention { message, backup }) => {
+            ProfilesPayload::NeedsAttention { message, backup }
+        }
+        Err(message) => ProfilesPayload::NeedsAttention {
+            message,
+            backup: None,
+        },
+    };
+    Ok(payload)
+}
+
+/// 从已保留的 `.broken` 备份恢复配置（用户显式确认后调用）.
+#[tauri::command]
+async fn restore_profiles(state: SharedState<'_>) -> Result<Vec<Profile>, String> {
+    let dir = logging::data_dir();
+    let profiles_state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = lock_profiles(&profiles_state)?;
+        profiles::restore_broken_profiles(&dir)
+    })
+    .await
+    .map_err(join_error)?
 }
 
 /// 保存（或覆盖同名）自定义配置.
 #[tauri::command]
-async fn save_profile(profile: Profile) -> Result<Vec<Profile>, String> {
+async fn save_profile(state: SharedState<'_>, profile: Profile) -> Result<Vec<Profile>, String> {
     let dir = logging::data_dir();
+    let profiles_state = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
-        let mut list = profiles::load_profiles(&dir);
+        let _guard = lock_profiles(&profiles_state)?;
+        let mut list = match profiles::load_profiles(&dir) {
+            profiles::ProfileLoad::Ready(list) => list,
+            profiles::ProfileLoad::NeedsAttention { message, backup: _ } => {
+                return Err(format!("配置需要先处理，未覆盖原文件：{message}"));
+            }
+        };
         profiles::upsert_profile(&mut list, profile)?;
         profiles::save_profiles(&dir, &list)?;
         Ok(list)
@@ -885,10 +1018,17 @@ async fn save_profile(profile: Profile) -> Result<Vec<Profile>, String> {
 
 /// 删除自定义配置.
 #[tauri::command]
-async fn delete_profile(name: String) -> Result<Vec<Profile>, String> {
+async fn delete_profile(state: SharedState<'_>, name: String) -> Result<Vec<Profile>, String> {
     let dir = logging::data_dir();
+    let profiles_state = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
-        let mut list = profiles::load_profiles(&dir);
+        let _guard = lock_profiles(&profiles_state)?;
+        let mut list = match profiles::load_profiles(&dir) {
+            profiles::ProfileLoad::Ready(list) => list,
+            profiles::ProfileLoad::NeedsAttention { message, backup: _ } => {
+                return Err(format!("配置需要先处理，未覆盖原文件：{message}"));
+            }
+        };
         profiles::remove_profile(&mut list, &name);
         profiles::save_profiles(&dir, &list)?;
         Ok(list)
@@ -902,10 +1042,11 @@ async fn delete_profile(name: String) -> Result<Vec<Profile>, String> {
 async fn apply_profile(state: SharedState<'_>, name: String) -> Result<String, String> {
     let worker = Arc::clone(state.inner());
     let recorder = Arc::clone(state.inner());
+    let generation = next_generation(state.inner());
     let result = tauri::async_runtime::spawn_blocking(move || apply_profile_now(&worker, &name))
         .await
         .map_err(join_error)?;
-    note_result(&recorder, &result);
+    note_result(&recorder, "apply_profile", generation, &result);
     result
 }
 
@@ -946,6 +1087,7 @@ fn main() {
             undo_fan_boost,
             read_registers,
             list_profiles,
+            restore_profiles,
             save_profile,
             delete_profile,
             apply_profile,
@@ -1144,15 +1286,60 @@ mod tests {
         let state = AppState::default();
         assert!(last_error(&state).is_none(), "初始不应有历史错误");
 
-        note_result(&state, &Err("写入校验失败 @ 0x0731".to_owned()));
+        note_result(
+            &state,
+            "set_power_limits",
+            1,
+            &Err("写入校验失败 @ 0x0731".to_owned()),
+        );
         assert_eq!(
             last_error(&state).as_deref(),
-            Some("写入校验失败 @ 0x0731"),
+            Some("[set_power_limits] 写入校验失败 @ 0x0731"),
             "失败必须留在状态里，而不是两秒后被轮询冲掉"
         );
 
-        note_result(&state, &Ok("已切换到狂暴档".to_owned()));
-        assert!(last_error(&state).is_none(), "成功后应清空历史错误");
+        note_result(
+            &state,
+            "set_power_limits",
+            1,
+            &Ok("已切换到狂暴档".to_owned()),
+        );
+        assert!(
+            last_error(&state).is_none(),
+            "同一操作重试成功后应清空历史错误"
+        );
+    }
+
+    #[test]
+    fn success_of_another_command_does_not_hide_failure() {
+        let state = AppState::default();
+        note_result(&state, "set_mode", 1, &Err("校验失败".to_owned()));
+        note_result(&state, "set_power_limits", 2, &Ok("功耗已保存".to_owned()));
+        assert_eq!(last_error(&state).as_deref(), Some("[set_mode] 校验失败"));
+
+        note_result(&state, "set_mode", 1, &Ok("已切换到狂暴档".to_owned()));
+        assert!(last_error(&state).is_none(), "同一命令成功后才允许清除");
+    }
+
+    #[test]
+    fn profiles_lock_failure_is_actionable_not_panic() {
+        let state = AppState::default();
+        poison(&state.profiles);
+        let error = lock_profiles(&state).unwrap_err();
+        assert!(error.contains("重启"), "实际: {error}");
+    }
+
+    #[test]
+    fn older_result_cannot_clear_or_replace_newer_failure() {
+        let state = AppState::default();
+        // A=1 先发起，B=2 后发起；B 先失败，A 后成功：B 的错误必须保留。
+        note_result(&state, "set_mode", 2, &Err("B 较新失败".to_owned()));
+        note_result(&state, "set_mode", 1, &Ok("A 较旧成功".to_owned()));
+        assert_eq!(last_error(&state).as_deref(), Some("[set_mode] B 较新失败"));
+
+        // A 的迟到失败也不能覆盖 B 的较新失败。
+        note_result(&state, "set_mode", 1, &Err("A 较旧失败".to_owned()));
+        assert_eq!(last_error(&state).as_deref(), Some("[set_mode] B 较新失败"));
     }
 
     #[test]

@@ -516,6 +516,51 @@ release 5 297 152 B。真实截图：<code>docs/screenshots/app-live-window.png<
 <li>外部查询实际悬挂回收、GPU 刷新竞争、跨版本完整性能回归未在本轮覆盖。</li>
 </ul>
 
+
+<h2>14. v0.5.2：可靠性复审的四个真实缺口</h2>
+<p>独立实践审查在 v0.5.1 之后指出四项真实缺陷：EC 部分失败静默、配置覆盖风险、
+外部进程回收不完整、错误被其它操作清除。第一轮 reviewer 为 Request Changes；修复并复验后 Approve。</p>
+
+<h3>14.1 修复链路</h3>
+<table>
+<thead><tr><th>问题</th><th>修复</th><th>证据</th></tr></thead>
+<tbody>
+<tr><td>部分 EC 读取失败被 `.ok()` 吞掉</td><td>本轮 `read_warnings` 记录字段级失败，保留有效读数；与操作失败同时显示，下一轮正常清除</td><td>浏览器路径验证</td></tr>
+<tr><td>配置文件覆盖与非法项静默丢失</td><td>临时文件 + sync_all + 原子替换 + .bak；NeedsAttention 禁止覆盖；显式备份恢复；读改写互斥</td><td>11 条配置测试，含替换失败原文件逐字节不变</td></tr>
+<tr><td>超时后 worker/pipe 仍悬挂</td><td>启动即加入 Windows Job Object（PROCESS_SET_QUOTA | PROCESS_TERMINATE）；超时/输出超限显式 TerminateJobObject</td><td>真实 cmd+ping 继承 pipe、正常、超限、持续输出 4/4</td></tr>
+<tr><td>同命令迟到成功清除新失败</td><td>command + generation；旧成功/失败都不能覆盖较新失败</td><td>乱序单测通过</td></tr>
+</tbody>
+</table>
+
+<h3>14.2 实际验证</h3>
+<ul>
+<li>core 70 单测 + 1 doctest；app 44 单测；IPC 契约 8；两个 crate 严格 clippy / fmt。</li>
+<li>独立 Chromium + mock IPC 28/28，含配置恢复确认与部分 EC 失败可见。</li>
+<li>独立 reviewer：第一轮 Request Changes；修复后 Approve（最小范围）。</li>
+<li>CI 与 Release 结果以当次 run 和 API 为准，不把本报告当远端验证。</li>
+</ul>
+
+<h3>14.3 关键实现教训</h3>
+<ul>
+<li>直接 `child.kill()` 只会杀 cmd，ping 可能继承 pipe 继续运行；因此需要显式 `TerminateJobObject`。</li>
+<li>`AssignProcessToJobObject` 需要 `PROCESS_SET_QUOTA`；缺权限会让正常命令也失败。</li>
+<li>只按命令名清错不能防同命令乱序；需要调用代次。</li>
+<li>配置损坏后永远拒绝保存并不是完整恢复路径，必须给用户显式恢复入口。</li>
+</ul>
+
+<h3>14.4 本轮自测（5/5，100%）</h3>
+<ol>
+<li><strong>为什么只杀直接子进程不能保证读取结束？</strong><details><summary>答案</summary>后代可能继承 stdout/stderr 写端；需要显式结束进程组。</details></li>
+<li><strong>AssignProcessToJobObject 为什么失败？</strong><details><summary>答案</summary>缺 PROCESS_SET_QUOTA 权限；补权限后才能正常分配。</details></li>
+<li><strong>为什么仅按命令名清错不够？</strong><details><summary>答案</summary>同命令旧请求的迟到成功会清除较新失败，需要 generation。</details></li>
+<li><strong>配置 NeedsAttention 后如何恢复？</strong><details><summary>答案</summary>备份存在时显示“从备份恢复”按钮，确认后解析校验并原子保存，不自动覆盖。</details></li>
+<li><strong>Approve 是否代表全项目完整？</strong><details><summary>答案</summary>不是。仅表示本轮最小范围无已确认阻塞；真实 GUI、异常 Windows 环境、多机型等不在范围内。</details></li>
+</ol>
+
+<h3>14.5 未闭环</h3>
+<p>风扇曲线写入、MUX/电压、系统实际生效 PL、干净机实装、真实窗口外观、真实读屏播报、长时 soak、多机型仍未验证；
+外部 Job 被安全策略禁止的环境只做失败降级，未覆盖。</p>
+
 <footer>
   生成时间 2026-10-24 · 数据来自 <code>evidence/v0.1.1.json</code>、<code>evidence/v0.1.2.json</code>、<code>evidence/qa-round3.json</code> 的真实命令输出 ·
   计划与问题清单见 <code>docs/计划书/下一步改进指南.md</code> · 规则见 <code>AGENTS.md</code>

@@ -514,4 +514,11 @@ Office: PowerLimits { pl1: 45, pl2: 45, pl4: 200 }
 ### v0.5.2 发布进度
 
 - commit `d9ef361`、tag `v0.5.2` 已推送；Release API 复核 `draft=false`，exe 5,446,144 B，与本地构建一致。
-- CI run 仍在执行；package 产物与 CI 结论待回填。
+- [CI run 40155344884](https://github.com/lza6/Mechrevo-Max/actions/runs/40155344884)：verify / coverage / package **全部 success**。MSI/NSIS 上传 Release 后三资产需再复核。
+
+### v0.5.2 完整 Release 已复核
+
+- `draft=false`；[Release v0.5.2](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.5.2)。
+- exe **5,446,144 B**（sha256 `8935faff28a73ce0c2712c0a6daf4f8a2f7fab6a871dd855c82ed763b53f1a65`）、MSI **2,113,536 B**、NSIS **1,450,375 B**。
+- CI run **40155344884**：build/test/lint、coverage、package 全 success；MSI/NSIS 来自该 CI artifact 并上传。
+- 最终源码提交 `d9ef361`；后续文档提交在 main，未 force push。

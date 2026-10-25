@@ -174,13 +174,29 @@
     "assets": [
       {
         "name": "mechrevo-max.exe",
-        "size_bytes": 5446144
+        "size_bytes": 5446144,
+        "sha256": "8935faff28a73ce0c2712c0a6daf4f8a2f7fab6a871dd855c82ed763b53f1a65"
+      },
+      {
+        "name": "Mechrevo-Max_0.5.2_x64_en-US.msi",
+        "size_bytes": 2113536
+      },
+      {
+        "name": "Mechrevo-Max_0.5.2_x64-setup.exe",
+        "size_bytes": 1450375
       }
     ],
     "verified_via": "GitHub API releases/tags/v0.5.2"
   },
   "ci": {
-    "status": "in_progress",
-    "note": "等待 verify/coverage/package 全部完成，未提前宣称通过"
+    "run_id": 40155344884,
+    "head_sha": "d9ef361",
+    "conclusion": "success",
+    "jobs": [
+      "build · test · lint → success",
+      "coverage（core，仅上报）→ success",
+      "打包冒烟（msi/nsis）→ success"
+    ],
+    "verified_at": "2026-10-25T06:40:00+08:00"
   }
 }

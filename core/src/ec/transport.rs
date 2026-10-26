@@ -35,6 +35,16 @@ pub struct MockTransport {
     failing_reads: Mutex<Vec<u16>>,
 }
 
+impl Clone for MockTransport {
+    fn clone(&self) -> Self {
+        Self {
+            memory: Mutex::new(self.memory.lock().unwrap().clone()),
+            stuck: Mutex::new(self.stuck.lock().unwrap().clone()),
+            failing_reads: Mutex::new(self.failing_reads.lock().unwrap().clone()),
+        }
+    }
+}
+
 impl MockTransport {
     /// 新建空模拟层 (所有地址初始为 0).
     #[must_use]

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><title>变更报告 v0.6.0 — 风扇曲线写入</title>
+<style>
+body{font-family:"Microsoft YaHei",sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;line-height:1.7;color:#222}
+h1{border-bottom:3px solid #2b6cb0;padding-bottom:.4rem} h2{color:#2b6cb0;margin-top:2rem}
+table{border-collapse:collapse;width:100%;margin:1rem 0} th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;font-size:.92rem}
+th{background:#edf2f7} code{background:#f1f5f9;padding:1px 5px;border-radius:3px;font-size:.88rem}
+.pass{color:#276749;font-weight:600} .warn{color:#c05621;font-weight:600}
+.quiz{background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:1rem 1.5rem;margin-top:2rem}
+details{margin:.5rem 0}
+</style></head><body>
+<h1>变更报告 — v0.6.0 风扇曲线写入（T-040-04）</h1>
+<p>日期：2026-10-25 · 提交 <code>c2a974a</code>（功能）/ <code>c9f57ed</code>（回填）· tag <code>v0.6.0</code></p>
+
+<h2>1. 上下文</h2>
+<p>风扇曲线是本项目最后一个功能缺口（唯一 todo）。写错曲线可致风扇停转→过热，故按 high-risk 流程：先评审（指南 §19，三方案对比）→ 用户拍板 → 真机行为级验证 → 离线 TDD → 独立审查 3 轮 → 发布。</p>
+
+<h2>2. 关键决策</h2>
+<table>
+<tr><th>决策</th><th>理由</th></tr>
+<tr><td>方案 2：逐格写+读回+RPM 停转监视（而非整表原子写）</td><td>中途失败窗口不可接受；无块写 IOCTL 天然逐格；监视把"写错→过热"窗口压到最小</td></tr>
+<tr><td>0xFF 填充格不写不校验</td><td>填充语义不明（§19.8 假设 3），写错比不写更危险</td></tr>
+<tr><td>地址白名单 WRITABLE_PAIRS 仅含 CPU 表对</td><td>复审 #2：写错地址比写错数值更危险；GPU 未做行为级验证</td></tr>
+<tr><td>MIN_BASELINE_RPM=500 拒绝低基线写入</td><td>复审 Critical：baseline=0 时阈值塌缩为 0，停转保护静默失效</td></tr>
+<tr><td>测试断言必须走 ec 副本</td><td>复审 R2：MockTransport 深拷贝导致回滚测试恒真（零防护）</td></tr>
+</table>
+
+<h2>3. 真机验证（全部实际执行）</h2>
+<table>
+<tr><th>项</th><th>结果</th></tr>
+<tr><td>V-1 曲线区重扫</td><td class="pass">96 字节 0 diff</td></tr>
+<tr><td>V-1b 档位切换</td><td class="pass">0 diff — 表不随档位变</td></tr>
+<tr><td>V-2b 占空比 -7%</td><td class="pass">RPM 5416→5030（-7.1%），回滚逐字节复原</td></tr>
+<tr><td>F-10 完整写入</td><td class="pass">18 格 0 mismatch→回滚完整→RPM 恢复</td></tr>
+</table>
+
+<h2>4. 离线验证</h2>
+<table>
+<tr><th>门禁</th><th>结果</th></tr>
+<tr><td>core 测试</td><td class="pass">88 passed</td></tr>
+<tr><td>app 测试</td><td class="pass">44 + 8（契约）passed</td></tr>
+<tr><td>浏览器冒烟</td><td class="pass">33/33（含曲线写入 5 新断言）</td></tr>
+<tr><td>clippy / fmt</td><td class="pass">双 crate 干净</td></tr>
+<tr><td>CI main</td><td class="pass">run 40332841600 success；tag run 三 job success</td></tr>
+</table>
+
+<h2>5. 架构链路</h2>
+<p>前端表单（本地预校验→二次确认）→ IPC <code>set_fan_curve</code>（后端白名单校验→拿 EC 锁→spawn_blocking）→ core <code>write_curve</code>（validate→白名单→snapshot→RAII guard→逐格 write_settled 3 次重试→每格 RPM 检查→disarm 前末检）→ WindowsAcpiTransport（进程级 ≤50 次/秒限速）→ EC。</p>
+
+<h2>6. 风险与回滚</h2>
+<table>
+<tr><th>风险</th><th>缓解</th></tr>
+<tr><td>风扇停转→过热</td><td>RPM 监视 <30% 基线即回滚；写入前快照；RAII 兜底 panic；用户在场</td></tr>
+<tr><td>回滚本身失败</td><td>日志落盘可追溯；前端文案"已尝试自动回滚（若日志显示回滚失败，请重启）"</td></tr>
+<tr><td>发布回退</td><td>直接安装 v0.5.2 资产；EC 曲线可用表单写回原值（基线文档有默认值）</td></tr>
+</table>
+
+<h2>7. 已知限制</h2>
+<ul>
+<li>GPU 表对未开放写入（未做行为级验证）——下轮候选</li>
+<li>仅 GM6PQ0X 机型验证；跨机型需重测</li>
+<li>官方 UserFanTables 仍未逐点核对（本机备份缺失）——但行为级验证证明本区就是生效曲线，风险已压到可接受</li>
+</ul>
+
+<div class="quiz">
+<h2>8. 测验（自测通过：10/10，100%）</h2>
+<details><summary>Q1 写入前必须先做什么？（选择）</summary><p><b>A：snapshot 全部 32 格</b>。无快照则失败后无法回滚。</p></details>
+<details><summary>Q2 baseline RPM=0 时继续写会怎样？（判断）</summary><p><b>错</b>。已被 MIN_BASELINE_RPM=500 拒绝——阈值会塌缩为 0，停转保护静默失效。</p></details>
+<details><summary>Q3 0xFF 填充格为什么"不写不校验"？（简答）</summary><p>填充语义不明（是"无效点"还是"默认档"未证实）；写错语义可能扩大激活区，比不写更危险。§19.8 假设 3。</p></details>
+<details><summary>Q4 停转阈值如何计算？为何向上取整？（简答）</summary><p><code>baseline * 30 / 100</code> 用 div_ceil。不取整则 baseline 小时阈值塌缩（如 baseline=3→0），保护失效。</p></details>
+<details><summary>Q5 地址白名单在哪两层生效？（选择）</summary><p>core <code>write_curve</code> 内部 + app <code>set_fan_curve_now</code> 拿锁之前——纵深防御，前端写死不能替代 IPC 校验。</p></details>
+<details><summary>Q6 写错地址和写错数值哪个更危险？为什么？（简答）</summary><p>写错地址：合法曲线值写入任意 EC 区域（可能是温度阈值、功耗寄存器），内容校验完全拦不住；写错数值至少还在已验证的表里。</p></details>
+<details><summary>Q7 MockTransport 深拷贝对测试的影响？（简答）</summary><p>ec 持有 clone 副本，外层句柄永远读不到写入——断言落外层则恒真（复审 R2 发现 f3/f4/f4b/f5 全部空转）。断言必须走 <code>ec.read</code>。</p></details>
+<details><summary>Q8 写入失败后前端会说什么？（判断）</summary><p>"已尝试自动回滚（若日志显示回滚失败，请重启应用）"——不说"已回滚"，因为回滚失败只落日志，前端无从得知。</p></details>
+<details><summary>Q9 RPM 响应证明什么？（简答）</summary><p>0x0F20 区就是生效占空比表（否证"伪成功"假设）且与 0x0F00 温度表配对正确——这是写任何曲线前的行为级前提。</p></details>
+<details><summary>Q10 GPU 表为什么不能写？（选择）</summary><p class="pass"><b>B：未做行为级验证，不在 WRITABLE_PAIRS 白名单</b>。代码存在 ≠ 可信。</p></details>
+<p><b>通过标准：≥8/10。自测：10/10（100%）。</b></p>
+</div>
+</body></html>

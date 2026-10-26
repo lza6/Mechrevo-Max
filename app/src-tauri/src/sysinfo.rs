@@ -832,7 +832,9 @@ mod tests {
                 "-Command",
                 "1..50 | ForEach-Object { '0123456789abcdef' }",
             ],
-            Duration::from_secs(5),
+            // CI 冷启动下 powershell 首次运行可能 >5s（run 40351913217 偶发），
+            // 放宽到 20s；防挂起语义由上方 6s 悬挂测试另行保证。
+            Duration::from_secs(20),
         )
         .expect("持续输出但未超上限时应完成");
         assert!(!result.stdout.is_empty());

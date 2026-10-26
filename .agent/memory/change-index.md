@@ -62,3 +62,7 @@
 | 2026-10-25 | core/src/fancurve.rs | +写会话(validate/write_curve/pad_to_block/write_settled/RpmMonitor) | 83bf78a |
 | 2026-10-25 | core/src/ec/transport.rs | MockTransport 手写 Clone | 83bf78a |
 | 2026-10-25 | evidence/fan-dump-20261025.json | V-1 只读重扫 96 字节,与基线 0 diff | 83bf78a |
+| 2026-10-25 | core/src/fancurve.rs | write_curve 会话+白名单+停转监视+复审修复 | c2a974a |
+| 2026-10-25 | app/src-tauri/src/main.rs | set_fan_curve 命令 + CpuRpmMonitor | c2a974a |
+| 2026-10-25 | app/ui/{app.js,index.html,style.css} | 曲线写入表单+确认+busy+样式 | c2a974a |
+| 2026-10-25 | evidence/fan-*.json, fan-e2e-f10.json | 真机行为级验证 4 组证据 | c2a974a |

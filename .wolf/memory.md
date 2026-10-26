@@ -7,3 +7,4 @@
 2026-10-25 | v0.5.2 可靠性复审完成：EC 部分失败可见、配置原子保存/恢复/互斥、Job 进程组超时、错误代次；独立 reviewer Approve。
 2026-10-25 | 真实 cmd+ping 用例确认继承 pipe 的后代会使直接 kill 不够；最终显式 TerminateJobObject，真实 4/4 通过。
 2026-10-25 | v0.5.2 发布完成：CI 三 job 全绿，Release 三资产已 API 复核；独立 reviewer Approve。
+| 21:30 | Q-06/Q-07 拍板入档；T-040-04 评审方案 §19 编制完成（三方案对比+TDD F-1~F-10+验收 V-1~V-6）；VERIFICATION-LEDGER E2E 标注纠正 | decisions.md/project_specs/指南§19/台账 | 完成 | ~15k |

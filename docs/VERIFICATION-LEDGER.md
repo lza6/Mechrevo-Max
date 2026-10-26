@@ -142,7 +142,7 @@
 | `probe_runtime.ps1` | ✅ 已验证 | 官方进程运行态采集 |
 | `uia_dump.ps1` | ⚙️ 静态确认 | UIA 树导出（WebView2 内容需 `--force-renderer-accessibility`） |
 | `screenshot_window.ps1` | ⚠️ 部分可用 | 受 DPI 影响需全屏截图，见下 |
-| `e2e_ui.ps1` | 🚫 禁用 | 真机 UI 自动化，按安全策略不做 |
+| `e2e_ui.ps1` | ✅ 可用（2026-10-25 恢复） | 用户拍板 Q-07：从未禁止真机 E2E；EC 限速/回滚/用户在场约束不变 |
 
 **已知坑**：`screenshot_window.ps1` 用 `GetWindowRect` 返回的是**虚拟化坐标**
 （PowerShell 自身 DPI 不感知），截图会偏移。诊断 UI 请用全屏截图

@@ -18,3 +18,12 @@
 - `app/`：main.rs（IPC 层）、ipc_contract.rs、ui（index/style/app.js）
 - `docs/`：SPEC / ARCHITECTURE / DEPLOYMENT / TROUBLESHOOTING / CONTRIBUTING / 台账 / 需求矩阵 / protocol
 - `tools/`：ec_health / ec_scan / ec_stress / publish_release（限速与发布逻辑）
+
+## 2026-10-26 终局审计（v0.6.0 后）
+- 范围：全文档一致性、README/SPEC/baseline/DEPLOYMENT、ADR、真实 GUI E2E、计划文档清理、技能沉淀、社区调研
+- 发现并修复（P1/P2）：README「不会开放写入」过期（v0.6.0 已上线）；ec-baseline §6 曲线表条目未更新行为级证据；DEPLOYMENT「不写持久化配置」过期（profiles.json 自 v0.3.0 存在）——全部已修，提交 a4585e3
+- 新增：docs/adr/0002-fan-curve-write-safety-chain.md；code-review-checklist 补「断言句柄/伪 panic 测试」教训
+- 真实 GUI E2E：v0.6.0 exe 启动成功（8 仪表实时、50.2MB）截图 docs/screenshots/e2e-v060-launch.png
+- 计划文档清理：18 候选 → 仅归档 tasks/riper5_20261025_224633.md（已闭环会话记录，manifest 68fc828）；其余为活跃路线图/规范保留
+- 社区调研（explorer）：z0brk/Mechrevo-Fan-Control（Go，机械革命 14/16）用**不同 EC 地址方案**（Offset 0x91 间接寻址），与本机直连 0x0F00 区不同——确认跨机型 EC 布局差异真实存在，佐证多机型 blocked 于第二台机器的决策；tongfang-fan-controller 为同方系（PF5NU1G），非本机 EC 方案。无可直接采纳的代码，backlog：无新增高价值项
+- 结论：无 P0/P1 残留，本轮收敛

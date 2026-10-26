@@ -10,3 +10,4 @@
 | 21:30 | Q-06/Q-07 拍板入档；T-040-04 评审方案 §19 编制完成（三方案对比+TDD F-1~F-10+验收 V-1~V-6）；VERIFICATION-LEDGER E2E 标注纠正 | decisions.md/project_specs/指南§19/台账 | 完成 | ~15k |
 | 22:40 | T-040-04 离线阶段：V-1 重扫0 diff + core 写入会话(write_curve/validate/RPM监视) + 13测试全绿 + 提交 83bf78a | fancurve.rs/transport.rs/evidence | 完成 | ~35k |
 | 23:59 | T-040-04 完整闭环：真机 V-1/V-1b/V-2b/F-10 全过；审查3轮 Approve；v0.6.0 推送 tag+CI run 40332841600 | fancurve/main.rs/app.js/evidence | 完成 | ~60k |
+| 00:40 | 终局审计：3 处文档不一致修复+ADR 0002+GUI E2E+文档清理归档+社区调研 | a4585e3/68fc828 | 完成 | ~25k |

@@ -171,8 +171,9 @@ gh release download v0.1.0 --pattern "mechrevo-max.exe"
 | 命令行 | `python -X utf8 -I tools/ec_health.py` 查看当前值，再用 `ec_mode_exp.py` 恢复 |
 | 彻底重置 | 重启机器后 EC 会回到默认档位；或运行机械革命官方控制台恢复默认 |
 
-**注意**：本应用不写入任何持久化配置到磁盘，所有改动都在 EC 寄存器里，
-重启后由 BIOS/EC 固件决定初值。
+**注意**：档位/功耗/强冷等硬件改动都在 EC 寄存器里，重启后由 BIOS/EC 固件决定初值；
+自定义配置保存在 `%LOCALAPPDATA%\Mechrevo-Max\profiles.json`（含 `.bak` 备份与
+`.broken` 归档恢复，见 `app/src-tauri/src/profiles.rs`），损坏时应用内提供恢复入口。
 
 ---
 

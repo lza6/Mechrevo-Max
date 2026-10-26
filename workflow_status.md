@@ -530,3 +530,12 @@ Office: PowerLimits { pl1: 45, pl2: 45, pl4: 200 }
 | Q-04/Q-05 拍板 | Q-04 不做自动更新；Q-05 只要托盘（v0.7.0） | .agent/memory/decisions.md；改进指南 §17（归档副本） |
 | 计划文档清理 | 下一步改进指南.md 归档删除（manifest + 可回滚）；悬空引用 ×3 修复 | docs/archive/plans/20261027/ |
 | 发版 | v0.6.1 文档版（无二进制，notes 明确声明）；tag+release 已推送；CI success | run 40346143363；Release v0.6.1 |
+
+## 2026-10-27 · 第三轮：错误态测试补齐 + 记忆纠偏（v0.6.1 后）
+| 项 | 结果 | 证据 |
+|---|---|---|
+| P3-09 关闭 | qa_browser 33→37 断言（EC 异常三分支）+ 2 张错误态截图 | evidence/T-061-01.json；commit d98fd74 |
+| P2-10 记忆纠偏 | 关闭（2026-10-25 Q-07 已拍板恢复真机 E2E，台账漏同步） | known-issues.md |
+| 治理 HTML 报告 | change-report-2026-10-27-governance.html，测验自测 5/5 | reports/ |
+| CI | run 40347873528 success | gh run view |
+| 教训 | 开放项执行前必须先核对是否已被后续决策推翻（P2-10 差点引发误删合法工具） | 本节 |

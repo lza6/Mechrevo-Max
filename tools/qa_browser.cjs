@@ -10,7 +10,7 @@ function loadPlaywright() {
   ].filter(Boolean);
   for (const candidate of candidates) {
     try {
-      return require(candidate);
+      return require(candidate); global.__pw = candidate;
     } catch (error) {
       if (error.code !== 'MODULE_NOT_FOUND') throw error;
     }
@@ -252,6 +252,17 @@ const curveData = {
       JSON.stringify(c.args.temps) === '[50,60]' && JSON.stringify(c.args.duties) === '[192,196]';
   }));
   await page.screenshot({ path: path.join(root, 'docs/screenshots/audit-curve-write.png') });
+
+  // 响应式：超窄窗口（<600）导航收成图标、页面无横向滚动、大屏仪表 4 列
+  await page.setViewportSize({ width: 480, height: 653 });
+  await page.waitForTimeout(300);
+  ok('超窄窗口导航文字隐藏', await page.locator('.nav-label').first().isHidden());
+  ok('超窄窗口无横向滚动', await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));
+  await page.screenshot({ path: path.join(root, 'docs/screenshots/audit-narrow-480.png') });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(300);
+  ok('大屏仪表 4 列', await page.evaluate(() => getComputedStyle(document.querySelector('.gauge-grid')).gridTemplateColumns.trim().startsWith('repeat(4')));
+  await page.setViewportSize({ width: 960, height: 653 });
 
   const failed = results.filter(r => !r.pass);
   console.log(JSON.stringify({ total: results.length, passed: results.filter(r => r.pass).length, failed, errors, results }, null, 2));

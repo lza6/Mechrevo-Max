@@ -1164,7 +1164,18 @@ fn main() {
         .manage(Arc::new(AppState::default()))
         .setup(|app| {
             fit_window_to_monitor(app);
+            setup_tray(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // 点关闭 = 最小化到托盘（常驻控制台语义），真正的退出走托盘菜单。
+            // 仅拦截主窗口的关闭请求；托盘"退出"用 AppHandle::exit(0) 不经过此事件。
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_status,
@@ -1213,6 +1224,60 @@ fn enable_dpi_awareness() {
 
 #[cfg(not(windows))]
 fn enable_dpi_awareness() {}
+
+/// 创建托盘图标与菜单.
+///
+/// 决策依据（`decisions.md` 2026-10-27 Q-05）：只要托盘、不开机自启。
+/// 菜单：显示主窗口 / 退出。左键单击 = 显示主窗口。
+fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::{
+        menu::{Menu, MenuItem},
+        tray::{MouseButton, MouseButtonState, TrayIconBuilder},
+        Manager,
+    };
+
+    let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    let mut builder = TrayIconBuilder::with_id("main-tray")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .tooltip("机械革命控制台 · Mechrevo-Max")
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.unminimize();
+                    let _ = w.set_focus();
+                }
+            }
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.unminimize();
+                    let _ = w.set_focus();
+                }
+            }
+        });
+
+    if let Some(icon) = app.default_window_icon().cloned() {
+        builder = builder.icon(icon);
+    }
+    builder.build(app)?;
+    log::info!("[托盘] 初始化完成");
+    Ok(())
+}
 
 /// 按当前显示器尺寸调整窗口并居中.
 ///

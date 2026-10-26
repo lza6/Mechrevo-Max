@@ -1,6 +1,6 @@
 [package]
 name = "mechrevo-max"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 description = "机械革命笔记本控制台 (自研)"
 license = "MIT"
@@ -9,7 +9,7 @@ license = "MIT"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 log = "0.4"
 

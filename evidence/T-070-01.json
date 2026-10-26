@@ -1,0 +1,93 @@
+{
+  "task_id": "T-070-01",
+  "status": "passed",
+  "timestamp": "2026-10-26T23:36:28.458306",
+  "commands_executed": [
+    {
+      "cmd": "cargo build --release --offline (app/src-tauri)",
+      "exit_code": 0,
+      "raw_output_tail": "Finished `release` profile [optimized] target(s) in 1m 26s; exe 5 622 272 B"
+    },
+    {
+      "cmd": "cargo test --offline (app, all)",
+      "exit_code": 0,
+      "raw_output_tail": "44 passed (bin) + 8 passed (ipc_contract)"
+    },
+    {
+      "cmd": "node tools/qa_browser.cjs",
+      "exit_code": 0,
+      "raw_output_tail": "\"total\": 40, \"passed\": 40, failed 0, errors=[]"
+    },
+    {
+      "cmd": "release exe 真机启动",
+      "exit_code": 0,
+      "raw_output_tail": "log: [托盘] 初始化完成; [窗口] 完成适配 visible=Ok(true)"
+    },
+    {
+      "cmd": "CloseMainWindow() 后查进程",
+      "exit_code": 0,
+      "raw_output_tail": "ALIVE after close (tray semantics OK)"
+    }
+  ],
+  "files_changed": [
+    "app/src-tauri/Cargo.toml",
+    "app/src-tauri/src/main.rs",
+    "app/src-tauri/tauri.conf.json",
+    "core/Cargo.toml",
+    "app/ui/style.css",
+    "app/ui/index.html",
+    "tools/qa_browser.cjs"
+  ],
+  "tests": [
+    {
+      "name": "app bin 44 + ipc_contract 8",
+      "type": "unit",
+      "status": "passed",
+      "evidence": "本文件"
+    },
+    {
+      "name": "qa_browser 40 断言（含响应式 3 条）",
+      "type": "e2e",
+      "status": "passed",
+      "evidence": "docs/screenshots/audit-narrow-480.png"
+    },
+    {
+      "name": "真机托盘启动 + 关闭即隐藏",
+      "type": "smoke",
+      "status": "passed",
+      "evidence": "%LOCALAPPDATA%/Mechrevo-Max/logs 最新文件"
+    },
+    {
+      "name": "真机托盘菜单点击/退出",
+      "type": "smoke",
+      "status": "skipped",
+      "evidence": "需要人工点击（tray-icon 无 UIA 暴露），留待用户验收"
+    }
+  ],
+  "coverage_summary": {
+    "lines": null,
+    "branches": null,
+    "functions": null,
+    "statements": null
+  },
+  "seams_touched": [
+    "S7 前端 DOM↔JS（nav-label 包裹）",
+    "S10 版本号（三处 0.7.0）"
+  ],
+  "mock_scenarios_covered": [],
+  "browser_validation": {
+    "performed": true,
+    "paths": [
+      "480px 导航收图标",
+      "480px 无横向滚动",
+      "1440px 仪表 4 列"
+    ],
+    "screenshots": [
+      "audit-narrow-480.png"
+    ]
+  },
+  "limitations": [
+    "托盘菜单交互需人工验收",
+    "dvh 在真机 WebView2 渲染未单独验证（与 100% 视觉等价时无回归即可）"
+  ]
+}

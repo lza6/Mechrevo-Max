@@ -34,3 +34,9 @@
 - doctest 首跑失败为环境问题（choco rust 的 rustdoc.exe 缺失），按台账用 RUSTDOC 指向 rustup 1.95.0 工具链后通过——该坑已在 tested-scope 有记录，本次复确认仍有效
 - 收尾：上轮新增的《前端UI增强计划》文档提交推送 a8c766c；CI run 待推送后核对
 - 结论：本轮无新缺陷；仍开放项不变（P2-07、P2-10、P3-09、P3-13、S4/S6 真机 pending、多机型 blocked）
+
+## 2026-10-27 · 第二轮：计划文档闭环清理 + 决策拍板 + v0.6.1
+- 抽验：core 88 单测 / 前端 33 断言全绿，工作区无漂移（qa_browser 截图副产物已还原）
+- 用户拍板 Q-04（不做自动更新）/ Q-05（只要托盘，纳入 v0.7.0）
+- 《下一步改进指南.md》全部任务闭环 → 按 §10.4 流程归档删除（docs/archive/plans/20261027/ + manifest）
+- 悬空引用修复：project_specs.md、REQUIREMENTS-TRACEABILITY.md、ADR-0002

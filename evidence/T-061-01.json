@@ -1,0 +1,55 @@
+{
+  "task_id": "T-061-01",
+  "status": "passed",
+  "timestamp": "2026-10-26T23:16:17.390690",
+  "commands_executed": [
+    {
+      "cmd": "node tools/qa_browser.cjs",
+      "exit_code": 0,
+      "raw_output_tail": "\"total\": 37, \"passed\": 37, failed 0, errors=[]"
+    }
+  ],
+  "files_changed": [
+    "tools/qa_browser.cjs",
+    "docs/screenshots/audit-ec-unavailable.png",
+    "docs/screenshots/audit-ec-elevation.png"
+  ],
+  "tests": [
+    {
+      "name": "qa_browser EC 异常态 4 断言（driver/elevation/restart 分支 + 修复命令可见）",
+      "type": "e2e",
+      "status": "passed",
+      "evidence": "本文件"
+    }
+  ],
+  "coverage_summary": {
+    "lines": null,
+    "branches": null,
+    "functions": null,
+    "statements": null
+  },
+  "seams_touched": [
+    "S7 前端 DOM↔JS",
+    "S8 前端交互↔后端"
+  ],
+  "mock_scenarios_covered": [
+    "ec_unavailable_driver",
+    "ec_elevation",
+    "ec_restart"
+  ],
+  "browser_validation": {
+    "performed": true,
+    "paths": [
+      "EC 未连接警报",
+      "权限不足警报",
+      "需重启警报"
+    ],
+    "screenshots": [
+      "audit-ec-unavailable.png",
+      "audit-ec-elevation.png"
+    ]
+  },
+  "limitations": [
+    "mock IPC，非真实硬件断连路径"
+  ]
+}

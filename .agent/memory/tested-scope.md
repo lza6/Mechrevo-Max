@@ -33,3 +33,5 @@
 | 配置持久化 | 单元 + 故障注入 | **11 passed** | 原子替换、替换失败不变、非法条目、恢复备份 |
 | 外部进程边界 | 真实子进程 | **4/4** | cmd+ping 继承 pipe、输出超限、持续输出、正常退出 || 真机写入与窗口外观 | E2E | **blocked** | 遵守禁止真机 UI 自动化；不以 mock 替代 |
 | 长时 soak、多机型、干净机实装 | 集成 | **未验证** | 不在本轮声称完成 |
+
+| 前端 EC 异常态（driver/elevation/restart） | 独立 Chromium + mock IPC | 4 断言 passed（全套 37/37） | 2026-10-27 | evidence/T-061-01.json |

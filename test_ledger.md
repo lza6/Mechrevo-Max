@@ -16,7 +16,7 @@
 | S4 | EC 写后读回 | `Ec::write_verified` | 驱动 `DeviceIoControl` 返回语义 | 不信返回值，一律读回比对；不符即 `Err` | 2026-10-24（mock） | **pending**（真机未复测） | `detects_write_verify_mismatch`；真机 `--ignored` 未跑 |
 | S5 | 寄存器地址表 | `core/src/namespace.rs` | `docs/protocol/ec-access.md` / `ec-baseline.md` | 地址、含义、`AddrStatus`、实测值一致 | 2026-10-24 | **locked**（人工核对） | 两文档 7 项地址与常量逐项比对一致 |
 | S6 | 撤销 ↔ 硬件状态 | `ModeChange::undo` / `ChangeRecord::undo` | EC 寄存器实际行为 | 撤销后寄存器回到快照值 | 2026-10-24（mock） | **pending**（"撤销后固件是否重新应用"未验证） | `switches_between_all_modes`（mock）；见 `ec-baseline.md` §6 |
-| S7 | 前端 DOM ↔ JS 映射 | `app/ui/index.html` 的 id | `app/ui/app.js` 的 `ui` 映射 | 当前 7 页 DOM id 与 ui 映射一致；缺失时首屏报错 | 2026-10-25 | **locked** | `tools/qa_browser.cjs` 21 断言 + `findMissingElements` 自检 |
+| S7 | 前端 DOM ↔ JS 映射 | `app/ui/index.html` 的 id | `app/ui/app.js` 的 `ui` 映射 | 当前 7 页 DOM id 与 ui 映射一致；缺失时首屏报错 | 2026-10-27 | **locked** | `tools/qa_browser.cjs` 37 断言（含 EC 异常三分支）+ `findMissingElements` 自检；`evidence/T-061-01.json` |
 | S8 | 前端交互 ↔ 后端命令 | 按钮/滑块事件 | `invoke(IPC.xxx)` 调用与返回值 | 成功/失败/禁用/脏检查/危险确认状态正确 | 2026-10-25 | **locked** | `tools/qa_browser.cjs` 21 断言，含取消不发 IPC、确认才发 IPC |
 | S9 | 发布产物 ↔ 源码 | `tag` 指向的提交 | Release 上的 `mechrevo-max.exe` | 产物由该提交构建；大小/哈希可核对 | 2026-10-25 | **locked** | v0.5.2：exe 5 446 144 B，sha256 `8935faff…1a65`；CI run 40155344884 三 job success |
 | S10 | 版本号 | `core/Cargo.toml` / `app/Cargo.toml` / `tauri.conf.json` | 发布 tag | 三处一致 + 与 tag 一致 | 2026-10-25 | **locked** | 三处均 0.5.2；tag v0.5.2；CI run 40155344884 全 success |

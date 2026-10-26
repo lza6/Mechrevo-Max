@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>变更报告 · 2026-10-27 治理轮（v0.6.1）</title>
+<style>
+body{font-family:"Segoe UI","Microsoft YaHei UI",sans-serif;max-width:900px;margin:0 auto;padding:24px;line-height:1.7;color:#1a1a2e;background:#fafafa}
+h1{border-bottom:3px solid #0aa; padding-bottom:8px}
+h2{margin-top:32px;color:#066}
+table{border-collapse:collapse;width:100%;margin:12px 0}
+td,th{border:1px solid #ccc;padding:6px 10px;text-align:left}
+th{background:#eef}
+code,pre{background:#eee;border-radius:4px;padding:1px 5px}
+pre{padding:10px;overflow-x:auto}
+.quiz{background:#fff;border:2px solid #0aa;border-radius:8px;padding:16px}
+.ans{color:#066}
+</style>
+</head>
+<body>
+<h1>变更报告 · 2026-10-27 治理轮（v0.6.1）</h1>
+
+<h2>1. 上下文</h2>
+<p>v0.6.0 功能封板后，项目进入"治理收尾"阶段：两轮会话（2026-10-26 终局审计、2026-10-27 复核）验证全部绿，但存在三类遗留：① 计划文档散落（改进指南已闭环却仍占活跃目录）；② §17 决策项 Q-04/Q-05 搁置数月阻塞归档；③ 记忆台账有过期条目（P2-10 已被 Q-07 拍板推翻却仍标"开放"）、P3-09 错误态截图缺失。</p>
+
+<h2>2. 直觉（关键决策与取舍）</h2>
+<ul>
+<li><strong>不重复审计</strong>：记忆显示审计刚收敛，精力放在"未闭环、未验证"项——符合记忆优先原则。</li>
+<li><strong>决策交用户拍板</strong>：Q-04（付费签名=成本）/ Q-05（托盘=常驻内存取舍）属于 2.4 允许提问的"成本投入"与"业务分歧"类。用户选：Q-04 不做、Q-05 只要托盘（纳入 v0.7.0）。</li>
+<li><strong>零代码也发版</strong>：用户拍板发 v0.6.1 文档版，release notes 明确声明"无二进制产物"，避免误导下载者。</li>
+<li><strong>先修记忆再干活</strong>：P2-10 是被后续决策（Q-07）推翻的过期条目，先关闭它避免本轮误删合法工具。</li>
+</ul>
+
+<h2>3. 做了什么</h2>
+<table>
+<tr><th>类别</th><th>内容</th><th>提交/证据</th></tr>
+<tr><td>决策拍板</td><td>Q-04 自动更新=不做；Q-05=只要托盘（v0.7.0）</td><td>042b886；decisions.md</td></tr>
+<tr><td>文档归档</td><td>《下一步改进指南》全闭环 → docs/archive/plans/20261027/（含 manifest，可回滚）；悬空引用 ×3 修复</td><td>042b886</td></tr>
+<tr><td>记忆修正</td><td>P2-10 关闭（被 Q-07 推翻）；P3-09 关闭（本轮补齐）</td><td>known-issues.md</td></tr>
+<tr><td>测试增强</td><td>qa_browser 新增 EC 异常三分支断言：33→37，全绿；新增 2 张错误态截图</td><td>evidence/T-061-01.json</td></tr>
+<tr><td>发版</td><td>tag v0.6.1 + Release（文档版，无二进制）</td><td>run 40346143363 success</td></tr>
+</table>
+
+<h2>4. 架构/链路图</h2>
+<pre>
+前端 EC 异常态链路（本轮补测的部分）
+get_status → StatusPayload.ec{kind,hint} → renderEc(app.js:286)
+  ├─ kind=ready        → pill 绿 + alert 隐藏
+  ├─ kind=unavailable,hint=driver   → 警报 + 驱动修复命令(pnputil) + relaunch 隐藏
+  ├─ kind=unavailable,hint=elevation → 警报"需要管理员权限" + relaunch 显示
+  └─ kind=unavailable,hint=restart   → 警报"需要重启程序" + relaunch 显示
+（免驱数据 CPU/内存照常显示；EC 依赖项降级为 "—"）
+</pre>
+
+<h2>5. 验证证据</h2>
+<table>
+<tr><th>验证</th><th>命令</th><th>结果</th></tr>
+<tr><td>core 单测</td><td><code>cargo test --lib</code></td><td>88 passed（两轮均跑）</td></tr>
+<tr><td>app 单测</td><td><code>cargo test --bin mechrevo-max</code></td><td>44 passed</td></tr>
+<tr><td>IPC 契约</td><td><code>cargo test --test ipc_contract</code></td><td>8 passed</td></tr>
+<tr><td>doctest</td><td><code>RUSTDOC=&lt;rustup&gt; cargo test --doc</code></td><td>1 passed（choco rustdoc 缺失坑复确认）</td></tr>
+<tr><td>前端 E2E</td><td><code>node tools/qa_browser.cjs</code></td><td><strong>37/37</strong>，errors=[]，exit 0</td></tr>
+<tr><td>clippy</td><td><code>cargo clippy --offline</code> ×2 crate</td><td>0 warning</td></tr>
+<tr><td>CI</td><td>run 40346143363（tag v0.6.1）</td><td>success</td></tr>
+</table>
+<p>边界：真机硬件写入/断连路径未验证（安全策略：用户在场约束）；多机型 blocked 于第二台机器。</p>
+
+<h2>6. 风险与回滚</h2>
+<ul>
+<li>归档删除 = git rename（99% 相似度保留历史）；回滚 <code>git checkout 000c173~1 -- "docs/计划书/下一步改进指南.md"</code> 或取归档副本。</li>
+<li>v0.6.1 无代码变更 → 回滚 = checkout v0.6.0，功能完全等价。</li>
+<li>qa_browser 新断言只依赖既有 mock 结构，无生产代码改动 → 回滚即删测试块。</li>
+</ul>
+
+<h2>7. 已知限制</h2>
+<ul>
+<li>S4（真机写后读回）、S6（撤销后固件行为）仍是 pending——mock 无法替代硬件。</li>
+<li>q-03（ec_stress.py 去留）延后至 v0.2.1 已随其闭环，无遗留。</li>
+<li>前端 EC 异常态为 mock IPC，非真实驱动断连。</li>
+</ul>
+
+<div class="quiz">
+<h2>8. 测验（自测）</h2>
+<p><strong>Q1（选择）</strong>：EC 显示"需要管理员权限"警报时，<code>#relaunch</code> 按钮和驱动修复命令（pnputil）哪个可见？<br>
+<span class="ans">答：relaunch 可见，alert-driver 隐藏（两分支互斥，app.js:303-304）。</span></p>
+<p><strong>Q2（判断）</strong>：v0.6.1 包含新的 exe 二进制产物。<br>
+<span class="ans">错。v0.6.1 是文档治理版，无代码变更，release notes 明确声明无二进制。</span></p>
+<p><strong>Q3（简答）</strong>：为什么 P2-10（删除 e2e_ui.ps1/cdp_probe.mjs）在本轮被关闭而不是执行删除？<br>
+<span class="ans">答：该问题已被 2026-10-25 的 Q-07 拍板推翻——用户确认从未禁止真机 E2E，两脚本恢复为合法验证工具。记忆台账未同步，本轮修正记忆而非删脚本。教训：执行开放项前必须先核对是否已被后续决策推翻。</span></p>
+<p><strong>Q4（判断）</strong>：qa_browser 的 EC 异常态断言证明真实硬件断连时 UI 正确。<br>
+<span class="ans">错（部分）。mock IPC 只证明前端渲染分支逻辑正确；真实驱动断连路径仍需真机验证（S4/S6 pending 同理）。</span></p>
+<p><strong>Q5（简答）</strong>：归档删除改进指南的回滚方式有哪两种？<br>
+<span class="ans">答：① git checkout 归档前提交恢复原路径；② 直接取用 docs/archive/plans/20261027/ 下的归档副本（manifest 有记录）。</span></p>
+<p><strong>通过标准</strong>：≥4/5 且无事实错误。<strong>自测结果：5/5 通过</strong>（答案与 evidence/T-061-01.json、decisions.md、known-issues.md 交叉核对一致）。</p>
+</div>
+</body>
+</html>

@@ -126,6 +126,20 @@ const curveData = {
   ok('EC 不可用时 CPU 仪表仍有值', /\d/.test(await page.locator('#g-cpu-util .value').textContent()));
   ok('EC 不可用时免驱内存仍有值', /\d/.test(await page.locator('#g-mem .value').textContent()));
   ok('EC 不可用时 EC 温度降级', (await page.locator('#g-cpu-temp .value').textContent()).includes('—'));
+  ok('EC 不可用警报可见+标题', await page.locator('#ec-alert').isVisible() && (await page.locator('#ec-alert-title').textContent()) === 'EC 通道不可用');
+  ok('EC 不可用显示修复命令', await page.locator('#alert-driver').isVisible() && (await page.locator('#alert-driver pre').textContent()).includes('pnputil'));
+  await page.screenshot({ path: path.join(root, 'docs/screenshots/audit-ec-unavailable.png') });
+
+  // 权限不足（elevation）与需重启（restart）两个分支：警报标题、按钮、驱动指引互斥
+  status = ready({ ec: { kind: 'unavailable', message: '拒绝访问', hint: 'elevation' } });
+  await page.evaluate((s) => { window.__status = s; }, status);
+  await page.waitForTimeout(2300);
+  ok('权限不足分支标题+重启按钮', (await page.locator('#ec-alert-title').textContent()) === '需要管理员权限' && await page.locator('#relaunch').isVisible());
+  status = ready({ ec: { kind: 'unavailable', message: '需要重启以获取驱动', hint: 'restart' } });
+  await page.evaluate((s) => { window.__status = s; }, status);
+  await page.waitForTimeout(2300);
+  ok('需重启分支标题+重启按钮', (await page.locator('#ec-alert-title').textContent()) === '需要重启程序' && await page.locator('#relaunch').isVisible());
+  await page.screenshot({ path: path.join(root, 'docs/screenshots/audit-ec-elevation.png') });
 
   // 无电池 + 无 GPU + 未知内存：全部未知，不显示 0
   status = ready({ system: { cpu_util_pct: 10, mem_used_mb: null, mem_total_mb: null, mem_used_pct: null, gpu: null, battery: null, disk: null, device: { cpu: 'i9', cpu_threads: 24, cpu_cores: 16, os: 'Windows' } } });

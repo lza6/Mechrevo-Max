@@ -29,12 +29,12 @@
 | P2-06 | 滑块范围双份事实源 | P2 | **已修（v0.5.1）** | `StatusPayload.limits_meta` 从 `core::control` 范围常量下发，前端初始化读取 |
 | P2-07 | Mode(2) vs OperatingMode(3) 不对齐 | P2 | "均衡"档用 Gaming 默认值，UI 无独立 tab |
 | ~~P2-08~~ | ~~MSI/NSIS 从未构建验证~~ | **已定位（v0.1.5）** | CI package job 首次真跑即失败：`Couldn't find a .ico icon` —— `bundle.icon` 从未包含 `icon.ico`，配置本身不可能打包成功。已修，待 v0.1.5 的 CI 复核 |
-| P2-10 | 与"禁 E2E"策略冲突的脚本仍在 | P2 | `scripts/e2e_ui.ps1`、`scripts/cdp_probe.mjs` |
+| ~~P2-10~~ | ~~与"禁 E2E"策略冲突的脚本仍在~~ | **已修（Q-07 拍板，2026-10-25）** | 用户确认从未禁止真机 E2E，`e2e_ui.ps1`/`cdp_probe.mjs` 恢复为合法验证工具（EC 限速/回滚/在场约束不变） |
 | P3-01 | `read_block` 地址回绕 | P3 | **已修（v0.5.1）** | `checked_add` + EC 上界校验；新增越界与上界单测 |
 | P3-03 | 缺 `docs/adr/` | P3 | **已修（v0.5.1）** | 新增 `docs/adr/0001-sampling-decoupled-from-ec.md` |
 | P3-07 | `tauri.conf.json` `center:true` 与实际定位冲突 | P3 | setup 里贴左上角覆盖它 |
 | ~~P3-08~~ | ~~无覆盖率工具与基线~~ | **已修（v0.1.3）** | 已安装 `cargo-llvm-cov`；core 行覆盖 86.56%（排除 `ec/windows.rs` 后 97.1%），app 采样路径待纳入 |
-| P3-09 | 只有一张成功态截图 | P3 | 缺"EC 未连接""权限不足"证据 |
+| ~~P3-09~~ | ~~只有一张成功态截图~~ | **已修（2026-10-27）** | qa_browser 新增 EC 异常三分支断言（37/37 绿）+ 2 张错误态截图（audit-ec-unavailable / audit-ec-elevation）；证据 evidence/T-061-01.json |
 | ~~P3-11~~ | ~~`get_status` 280ms 持锁~~ | **P1（已修）** | **根因不是「IOCTL 次数多」，而是命令跑在 UI 线程上**：Tauri v2 的 `#[tauri::command]` 默认 `ExecutionContext::Blocking`，阻塞分支不 spawn（官方 doc：`async` 选项「只在需要不阻塞主线程时才用」）。已全部改 `async fn` + `spawn_blocking`。**实测帧率仍待用户在场验证** |
 | ~~P3-12~~ | ~~`RestoreGuard` 在 release 下 Drop 失败仅 `eprintln!`~~ | **已修（v0.1.4）** | 已有 `log` 文件 logger + panic hook，release 下也可追溯；本轮未重复执行真实回滚 |
 | P3-13 | 契约测试参数名仍是手写表 | P3 | 源码解析只覆盖命令名，参数名漂移仍抓不到 |

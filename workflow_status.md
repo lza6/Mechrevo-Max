@@ -522,3 +522,11 @@ Office: PowerLimits { pl1: 45, pl2: 45, pl4: 200 }
 - exe **5,446,144 B**（sha256 `8935faff28a73ce0c2712c0a6daf4f8a2f7fab6a871dd855c82ed763b53f1a65`）、MSI **2,113,536 B**、NSIS **1,450,375 B**。
 - CI run **40155344884**：build/test/lint、coverage、package 全 success；MSI/NSIS 来自该 CI artifact 并上传。
 - 最终源码提交 `d9ef361`；后续文档提交在 main，未 force push。
+
+## 2026-10-27 · 第二轮：决策拍板 + 计划文档归档 + v0.6.1
+| 项 | 结果 | 证据 |
+|---|---|---|
+| 抽验 | core 88 / app 44 / 契约 8 / 前端 33 断言全绿，工作区无漂移 | 本轮 Bash 输出 |
+| Q-04/Q-05 拍板 | Q-04 不做自动更新；Q-05 只要托盘（v0.7.0） | .agent/memory/decisions.md；改进指南 §17（归档副本） |
+| 计划文档清理 | 下一步改进指南.md 归档删除（manifest + 可回滚）；悬空引用 ×3 修复 | docs/archive/plans/20261027/ |
+| 发版 | v0.6.1 文档版（无二进制，notes 明确声明）；tag+release 已推送；CI success | run 40346143363；Release v0.6.1 |

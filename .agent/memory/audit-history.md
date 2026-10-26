@@ -27,3 +27,10 @@
 - 计划文档清理：18 候选 → 仅归档 tasks/riper5_20261025_224633.md（已闭环会话记录，manifest 68fc828）；其余为活跃路线图/规范保留
 - 社区调研（explorer）：z0brk/Mechrevo-Fan-Control（Go，机械革命 14/16）用**不同 EC 地址方案**（Offset 0x91 间接寻址），与本机直连 0x0F00 区不同——确认跨机型 EC 布局差异真实存在，佐证多机型 blocked 于第二台机器的决策；tongfang-fan-controller 为同方系（PF5NU1G），非本机 EC 方案。无可直接采纳的代码，backlog：无新增高价值项
 - 结论：无 P0/P1 残留，本轮收敛
+
+## 2026-10-27 复核审计（本轮）
+- 性质：v0.6.0 后复核，非全量重复审计（2026-10-26 终局审计刚收敛，无 P0/P1 残留）
+- 真实运行验证全部通过：core lib 88 单测 / app 44 / IPC 契约 8 / doctest 1 / 前端 qa_browser 33 断言 0 失败 / 两 crate clippy 0 警告 / 无冲突标记残留
+- doctest 首跑失败为环境问题（choco rust 的 rustdoc.exe 缺失），按台账用 RUSTDOC 指向 rustup 1.95.0 工具链后通过——该坑已在 tested-scope 有记录，本次复确认仍有效
+- 收尾：上轮新增的《前端UI增强计划》文档提交推送 a8c766c；CI run 待推送后核对
+- 结论：本轮无新缺陷；仍开放项不变（P2-07、P2-10、P3-09、P3-13、S4/S6 真机 pending、多机型 blocked）

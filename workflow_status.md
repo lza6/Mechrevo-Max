@@ -539,3 +539,14 @@ Office: PowerLimits { pl1: 45, pl2: 45, pl4: 200 }
 | 治理 HTML 报告 | change-report-2026-10-27-governance.html，测验自测 5/5 | reports/ |
 | CI | run 40347873528 success | gh run view |
 | 教训 | 开放项执行前必须先核对是否已被后续决策推翻（P2-10 差点引发误删合法工具） | 本节 |
+
+## 2026-10-27 · v0.7.0 开工与发版
+| 项 | 结果 | 证据 |
+|---|---|---|
+| 托盘常驻 | setup_tray + 关闭即隐藏；真机 smoke 通过（初始化日志 + CloseMainWindow 后进程存活） | evidence/T-070-01.json |
+| 响应式 M1 | clamp 字号 + dvh + 1280/600 断点；qa_browser 40 断言 | audit-narrow-480.png |
+| 版本 | 三处 0.7.0；release exe 5 622 272 B | Cargo.toml/tauri.conf.json |
+| 首版 tag CI flake | bounded_query 5s 超时偶发失败 → 放宽 20s（防挂起语义另测保证），重打 tag | run 40351913217(fail) → 40353469345(success) |
+| Release | https://github.com/lza6/Mechrevo-Max/releases/tag/v0.7.0 | gh release create |
+| 人工验收待办 | 托盘菜单点击项（UIA 无法自动化） | release notes |
+| 教训 | 子进程冒烟测试超时要按 CI 冷启动余量设置；tag 发版前先看 tag CI 再发 notes | 本节 |

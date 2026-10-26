@@ -262,3 +262,17 @@ asset 大小与各自本地构建一致，`latest` = v0.1.2。
 `project_specs.md`：T-040-04 状态更新为"评审方案已出"；Q-06/Q-07 入决策表；`decisions.md` 追加 2 条。
 
 **未写任何实现代码**——§19.4 规格待用户批准后按 §19.7 顺序执行。
+
+---
+
+## 2026-10-25（深夜）· T-040-04 完整闭环 + v0.6.0 发布
+
+**真机验证（全部实际执行）**：V-1 曲线区重扫 0 diff；V-1b 档位切换 0 diff（表不随档位变）；V-2b 占空比 -7%→RPM -7.1%、回滚逐字节复原（配对行为级证明）；F-10 完整 18 格写入 0 mismatch→回滚完整→RPM 恢复。
+
+**实现**：core write_curve 会话（validate→白名单→snapshot→RAII→逐格重试→RPM 停转监视）+ app set_fan_curve 命令 + 前端写入表单（确认/取消/busy/样式）。门禁：core 88、app 44+8、浏览器 33/33、clippy/fmt 干净。
+
+**独立审查 3 轮**：R1 Request Changes（baseline=0 停转保护塌缩等 6 项）→ R2 Request Changes（**测试断言落在 MockTransport 深拷贝外恒真**、文档过期等 5 项）→ 全部修复 → R3 **Approve**。
+
+**发布**：提交 c2a974a + c9f57ed，tag v0.6.0，[Release](https://github.com/lza6/Mechrevo-Max/releases/tag/v0.6.0) 三资产（exe 5 446 144 / MSI 2 121 728 / NSIS 1 458 254 B），CI main run 40332841600 + tag run + docs run 40335308789 全 success。HTML 变更报告 + 测验 10/10：`reports/change-report-2026-10-25-v060.html`。
+
+**剩余下轮候选**：GPU 表对行为级验证→加白名单；K-01 手动检查更新；P2-07/P3-07；Q-03/Q-05 待拍板。

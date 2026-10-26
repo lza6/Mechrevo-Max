@@ -207,6 +207,38 @@ const curveData = {
   ok('确认后从备份恢复', await page.evaluate(() => window.__ipcCalls.some(c => c.cmd === 'restore_profiles')));
   ok('恢复后显示恢复的配置', (await page.locator('#profile-list').textContent()).includes('restored'));
 
+  // ---- 风扇曲线写入（T-040-04 F-9）：输入校验 + 取消不发 IPC + 确认才发 ----
+  await page.locator('.nav-item[data-page="cooling"]').click();
+  await page.evaluate(() => { window.__ipcCalls = []; });
+  // 非法输入：占空比低于安全下界
+  await page.locator('#curve-temps').fill('50, 60');
+  await page.locator('#curve-duties').fill('192, 10');
+  await page.locator('#apply-curve').click();
+  ok('曲线写入拒绝低于安全下界的占空比', (await page.locator('#curve-write-status').textContent()).includes('安全下界'));
+  ok('非法输入不发 IPC', await page.evaluate(() => window.__ipcCalls.filter(c => c.cmd === 'set_fan_curve').length) === 0);
+  // 非单调温度
+  await page.locator('#curve-temps').fill('60, 50');
+  await page.locator('#curve-duties').fill('192, 192');
+  await page.locator('#apply-curve').click();
+  ok('曲线写入拒绝非单调温度', (await page.locator('#curve-write-status').textContent()).includes('单调'));
+  // 合法输入 → 取消
+  await page.locator('#curve-temps').fill('50, 60');
+  await page.locator('#curve-duties').fill('192, 196');
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.locator('#apply-curve').click();
+  await page.waitForTimeout(200);
+  ok('取消曲线写入不发 IPC', await page.evaluate(() => window.__ipcCalls.filter(c => c.cmd === 'set_fan_curve').length) === 0);
+  // 合法输入 → 确认
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#apply-curve').click();
+  await page.waitForFunction(() => window.__ipcCalls.some(c => c.cmd === 'set_fan_curve'), { timeout: 5000 });
+  ok('确认曲线写入才发 IPC 且参数正确', await page.evaluate(() => {
+    const c = window.__ipcCalls.find(x => x.cmd === 'set_fan_curve');
+    return c && c.args.tempBlock === 0x0F00 && c.args.dutyBlock === 0x0F20 &&
+      JSON.stringify(c.args.temps) === '[50,60]' && JSON.stringify(c.args.duties) === '[192,196]';
+  }));
+  await page.screenshot({ path: path.join(root, 'docs/screenshots/audit-curve-write.png') });
+
   const failed = results.filter(r => !r.pass);
   console.log(JSON.stringify({ total: results.length, passed: results.filter(r => r.pass).length, failed, errors, results }, null, 2));
   await browser.close();

@@ -1,20 +1,25 @@
-//! 风扇曲线表（**只读**）.
+//! 风扇曲线表（只读展示 + 受控写入会话）.
 //!
 //! # 这是什么
 //!
-//! EC 里有若干 16 字节的表，本机实测（2026-10-24 全量扫描）在 `0x0F00`–`0x0F5F`
-//! 看到 6 个块，形态是「一串温度点 + 0xFF 填充」和「一串占空比（192/196/200）」交替出现。
+//! EC 里有若干 16 字节的表，本机实测（2026-10-24 全量扫描、2026-10-25 重扫
+//! 双次逐字节一致）在 `0x0F00`–`0x0F5F` 看到 6 个块，形态是「一串温度点 +
+//! 0xFF 填充」和「一串占空比（192/196/200）」交替出现。
 //!
-//! # 为什么只读、且不宣称"这就是风扇曲线"
+//! # 读取侧
 //!
-//! - 官方 profile 里只有 `FAN.TableName = "M1T1"` 这类**表名**，真正的曲线数值在
-//!   `UserFanTables/PH6PG*` 资源里，本机备份中没有，**无法逐点交叉核对**。
-//! - 因此本模块只做三件有把握的事：读出这 6 个块的原始字节、按数据特征分类
-//!   （温度点 / 占空比）、给出"候选配对"，并在返回结构里带上
-//!   [`AddrStatus::CommunityUnverified`] 的语义 —— **任何一处写入都不基于本模块**。
+//! 读出 6 个块的原始字节、按数据特征分类（温度点 / 占空比）、给出"候选配对"，
+//! 并在返回结构里带上 [`AddrStatus::CommunityUnverified`] 的语义。
 //!
-//! 写曲线是**高风险操作**（写错风扇可能不转 → 过热），必须等只读展示被确认无害、
-//! 且与官方表交叉核对之后再做。
+//! # 写入侧（T-040-04，2026-10-25）
+//!
+//! CPU 表对（`0x0F00`/`0x0F20`）已完成**行为级验证**后才开放写入：
+//! - 占空比 192-200→180，RPM 5416→5030（-7.1%），回滚逐字节复原
+//!   （`evidence/fan-write-v2b.json`）—— 证明该区就是生效曲线且配对正确；
+//! - 档位切换前后曲线区 0 diff —— 表不随档位变（`evidence/fan-dump-v1b.json`）。
+//!
+//! 写入安全链见 [`write_curve`]：校验 → 白名单 → 快照 → RAII 回滚 →
+//! 逐格有界重试 → RPM 停转监视。GPU 表对未做行为级验证，**不在写入白名单**。
 
 use crate::ec::{Ec, EcTransport};
 use crate::error::Result;
@@ -142,14 +147,35 @@ pub fn pair_points(temps: &[u8], duties: &[u8]) -> Vec<(u8, u8)> {
 // ---------------------------------------------------------------------------
 
 /// 本机实测（2026-10-24/25 双次逐字节一致）的表地址.
-/// CPU 温度点表基址（本机实测）.'
+/// CPU 温度点表基址（本机实测）.
 pub const CPU_TEMP_BLOCK: u16 = 0x0F00;
-/// CPU 占空比表基址（本机实测）.'
+/// CPU 占空比表基址（本机实测）.
 pub const CPU_DUTY_BLOCK: u16 = 0x0F20;
-/// GPU 温度点表基址（本机实测）.'
+/// GPU 温度点表基址（本机实测）.
 pub const GPU_TEMP_BLOCK: u16 = 0x0F30;
-/// GPU 占空比表基址（本机实测）.'
+/// GPU 占空比表基址（本机实测）.
 pub const GPU_DUTY_BLOCK: u16 = 0x0F50;
+
+/// 允许写入的表地址对（温度块, 占空比表）.
+///
+/// 复审 #2：后端 IPC 不得接受任意地址 —— 否则任何能调到 IPC 的路径都能把
+/// 一条"合法曲线"写到 EC 任意 16 字节区域，写错地址比写错数值更危险。
+/// 只开放本机已做行为级验证的 CPU 表；GPU 表待同样验证后再加入。
+pub const WRITABLE_PAIRS: &[(u16, u16)] = &[(CPU_TEMP_BLOCK, CPU_DUTY_BLOCK)];
+
+/// 校验 (temp_block, duty_block) 是否为已授权的可写表对.
+///
+/// # Errors
+/// 不在白名单时返回 [`Error::Config`].
+pub fn validate_blocks(temp_block: u16, duty_block: u16) -> Result<()> {
+    if WRITABLE_PAIRS.contains(&(temp_block, duty_block)) {
+        return Ok(());
+    }
+    Err(crate::Error::Config(format!(
+        "0x{temp_block:04X}/0x{duty_block:04X} 不是已授权的可写曲线表；当前仅支持 \
+         0x{CPU_TEMP_BLOCK:04X}/0x{CPU_DUTY_BLOCK:04X}（CPU，已行为级验证）"
+    )))
+}
 
 /// 占空比合法下界：本机两张表全部 ≥192（0xC0），且 `classify` 以 64 为界.
 /// 写入低于此值的占空比会被拒绝 —— 防止把风扇写到危险低速区.
@@ -225,13 +251,20 @@ pub trait RpmMonitor {
 /// 停转判定：低于写入前基线的这个比例即回滚.
 pub const STALL_RATIO: u16 = 30; // %
 
+/// 建立停转基准所需的最低 RPM.
+///
+/// 复审发现（2026-10-25）：基线为 0 或极小时 `基线*30/100` 会塌缩成 0，
+/// `rpm < 0` 永假 —— 停转保护静默失效，恰好是最危险的场景（风扇本已停转）。
+/// 因此低于该值直接拒绝写入，而不是"带着失效的保护"继续。
+pub const MIN_BASELINE_RPM: u16 = 500;
+
 /// 一次曲线写入会话的结果.
 #[derive(Debug)]
 pub struct WriteReport {
     /// 实际写入的格子数（不含 0xFF 跳过格）.
     pub cells_written: usize,
-    /// 是否发生了回滚.
-    pub rolled_back: bool,
+    /// 未被覆盖的格数（尾部保留原值）——UI 必须向用户交代（复审 #3）.
+    pub untouched_cells: usize,
 }
 
 /// 写入一条曲线到指定的温度块 + 占空比块.
@@ -250,9 +283,16 @@ pub fn write_curve<T: EcTransport, M: RpmMonitor>(
     curve: &CurveInput,
 ) -> Result<WriteReport> {
     curve.validate()?;
+    validate_blocks(temp_block, duty_block)?;
 
     // 1. 写入前基线 RPM（停转判定基准）
     let baseline_rpm = monitor.rpm()?;
+    if baseline_rpm < MIN_BASELINE_RPM {
+        // 复审 Critical #1：基线过低会让阈值塌缩成 0，停转保护静默失效
+        return Err(crate::Error::Config(format!(
+            "当前风扇转速 {baseline_rpm} RPM 过低（低于 {MIN_BASELINE_RPM}），无法建立停转保护基准，拒绝写入"
+        )));
+    }
 
     // 2. 快照两块（完整 16 字节，含填充格）
     let mut addrs = Vec::with_capacity(32);
@@ -265,10 +305,11 @@ pub fn write_curve<T: EcTransport, M: RpmMonitor>(
     let point = ec.snapshot(&addrs, "fan curve write")?;
     let mut guard = ec.guard(point);
 
-    // 3. 停转检查（每格占空比写完后调用）
+    // 3. 停转检查（每格写完后调用）
+    // 阈值向上取整，避免 baseline 较小时 `baseline*30/100` 塌缩成 0（复审 #5）
+    let threshold = (u32::from(baseline_rpm) * u32::from(STALL_RATIO)).div_ceil(100) as u16;
     let check_stall = |cells_done: usize| -> Result<()> {
         let rpm = monitor.rpm()?;
-        let threshold = (u32::from(baseline_rpm) * u32::from(STALL_RATIO) / 100) as u16;
         if rpm < threshold {
             log::error!(
                 "风扇停转保护：RPM {rpm} < 基线 {baseline_rpm} 的 {STALL_RATIO}%（已写 {cells_done} 格），回滚"
@@ -282,8 +323,7 @@ pub fn write_curve<T: EcTransport, M: RpmMonitor>(
 
     // 4. 逐格写温度点（0xFF 填充格跳过）
     let mut cells = 0usize;
-    let temp_src = &curve.temps;
-    let padded_temps = pad_to_block(temp_src);
+    let padded_temps = pad_to_block(&curve.temps);
     for (i, &v) in padded_temps.iter().enumerate() {
         let addr = temp_block + i as u16;
         if v == 0xFF {
@@ -306,10 +346,19 @@ pub fn write_curve<T: EcTransport, M: RpmMonitor>(
         check_stall(cells)?;
     }
 
+    // 未被覆盖的格子：短曲线的尾部（pad 成 0xFF 跳过 → 保留原表值）。
+    // UI 必须向用户交代这一点，否则用户会以为写入的是完整 16 格曲线。
+    let untouched = (BLOCK_LEN - curve.temps.len()) + (BLOCK_LEN - curve.duties.len());
+
+    // 6. 解守卫前最后一次停转检查（复审 #9：RPM 有物理滞后，
+    //    最后一格的影响可能在逐格检查后才显现）
+    check_stall(cells)?;
+
     guard.disarm();
     Ok(WriteReport {
         cells_written: cells,
-        rolled_back: false,
+        // 未被本次写入覆盖的格子数（§19.8 假设 3：填充格不碰，尾部保留原值）.
+        untouched_cells: untouched,
     })
 }
 
@@ -357,6 +406,17 @@ mod write_tests {
     impl RpmMonitor for FixedRpm {
         fn rpm(&self) -> Result<u16> {
             Ok(self.0)
+        }
+    }
+
+    /// 总是失败的 RPM 监视器（模拟读数失败）.
+    struct ErrRpm;
+    impl RpmMonitor for ErrRpm {
+        fn rpm(&self) -> Result<u16> {
+            Err(crate::Error::Ioctl {
+                code: crate::ec::IOCTL_EC_READ,
+                source: std::io::Error::other("模拟读数失败"),
+            })
         }
     }
 
@@ -449,7 +509,6 @@ mod write_tests {
         let report = write_curve(&ec, &FixedRpm(5000), CPU_TEMP_BLOCK, CPU_DUTY_BLOCK, &curve)
             .expect("合法曲线必须写成功");
         assert_eq!(report.cells_written, 6);
-        assert!(!report.rolled_back);
         // 读回验证（经 ec —— 它持有 t 的克隆副本）
         assert_eq!(ec.read(CPU_TEMP_BLOCK).unwrap(), 50);
         assert_eq!(ec.read(CPU_TEMP_BLOCK + 2).unwrap(), 60);
@@ -488,41 +547,152 @@ mod write_tests {
             duties: vec![192],
         };
         assert!(write_curve(&ec, &FixedRpm(5000), CPU_TEMP_BLOCK, CPU_DUTY_BLOCK, &curve).is_err());
-        // 回滚断言：第 0 格恢复为原值 54（54 = 0x36 基线），未被留在新值 50
+        // 回滚断言走 ec.read —— ec 持有自己的 MockTransport 深拷贝副本，
+        // 外层 stuck 句柄永远读不到 ec 的写入（复审第 2 轮：旧断言恒真）
         assert_eq!(
-            stuck.read_ec(CPU_TEMP_BLOCK).unwrap(),
+            ec.read(CPU_TEMP_BLOCK).unwrap(),
             54,
             "失败后第 0 格必须回滚到快照值"
         );
         // 占空比块尚未被写，应保持原值
-        assert_eq!(stuck.read_ec(CPU_DUTY_BLOCK + 1).unwrap(), 192);
+        assert_eq!(ec.read(CPU_DUTY_BLOCK + 1).unwrap(), 192);
     }
 
-    // F-4 panic 中途回滚（guard 的 Drop 路径）
+    // F-4 真实 panic 路径：在持有 guard 时 panic（不经 drop 语句），
+    // 验证栈展开过程中 RestoreGuard::Drop 真的回滚了硬件（复审 #6：原版本
+    // 先 drop(guard) 再 panic，测的只是普通 drop，不是 panic 展开）.
     #[test]
     fn f4_panic_mid_session_rolls_back() {
         let t = MockTransport::new();
         seed_real_blocks(&t);
         let ec = Ec::new(t.clone());
+        let addrs: Vec<u16> = (0..BLOCK_LEN as u16)
+            .map(|i| CPU_TEMP_BLOCK + i)
+            .chain((0..BLOCK_LEN as u16).map(|i| CPU_DUTY_BLOCK + i))
+            .collect();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            // 手动复刻 write_curve 的前半段 + panic，验证 guard 行为
-            let addrs: Vec<u16> = (0..BLOCK_LEN as u16)
-                .map(|i| CPU_TEMP_BLOCK + i)
-                .chain((0..BLOCK_LEN as u16).map(|i| CPU_DUTY_BLOCK + i))
-                .collect();
             let point = ec.snapshot(&addrs, "panic test").unwrap();
-            let guard = ec.guard(point);
+            let _guard = ec.guard(point);
             ec.write_unverified(CPU_TEMP_BLOCK, 50).unwrap();
-            drop(guard); // panic 展开路径其实走不到这里；显式 drop 模拟离开作用域
-            panic!("模拟写入中途崩溃");
+            panic!("模拟写入中途崩溃"); // 不 disarm、不显式 drop —— 让栈展开处理
         }));
         assert!(result.is_err());
-        // guard Drop 已回滚
         assert_eq!(
-            t.read_ec(CPU_TEMP_BLOCK).unwrap(),
+            ec.read(CPU_TEMP_BLOCK).unwrap(),
             54,
-            "panic 后 guard 必须恢复原值"
+            "panic 展开时 guard 的 Drop 必须恢复原值"
         );
+    }
+
+    // F-4b 停转监视返回 Err（读数失败）也必须回滚并报错
+    #[test]
+    fn f4b_rpm_read_failure_rolls_back() {
+        let t = MockTransport::new();
+        seed_real_blocks(&t);
+        let ec = Ec::new(t.clone());
+        let curve = CurveInput {
+            temps: vec![50, 55],
+            duties: vec![192, 192],
+        };
+        // 监视器第一次（基线）就失败 → 在 snapshot 之前返回 Err，硬件未被触碰
+        let err = write_curve(&ec, &ErrRpm, CPU_TEMP_BLOCK, CPU_DUTY_BLOCK, &curve)
+            .expect_err("RPM 读数失败必须中止写入");
+        assert!(err.to_string().contains("模拟读数失败"));
+        // 表未被改动（经 ec 副本断言）
+        assert_eq!(ec.read(CPU_TEMP_BLOCK).unwrap(), 54);
+    }
+
+    // 复审 Critical #1：基线 RPM 过低时停转保护会失效，必须拒绝写入
+    #[test]
+    fn rejects_low_baseline_rpm() {
+        let t = MockTransport::new();
+        seed_real_blocks(&t);
+        let ec = Ec::new(t);
+        let curve = CurveInput {
+            temps: vec![50, 55],
+            duties: vec![192, 192],
+        };
+        let err = write_curve(&ec, &FixedRpm(0), CPU_TEMP_BLOCK, CPU_DUTY_BLOCK, &curve)
+            .expect_err("基线 RPM=0 必须拒绝写入（否则停转保护阈值塌缩为 0）");
+        assert!(
+            err.to_string().contains("无法建立停转保护基准"),
+            "错误信息应说明拒绝原因"
+        );
+    }
+
+    #[test]
+    fn rejects_baseline_just_below_floor() {
+        let t = MockTransport::new();
+        seed_real_blocks(&t);
+        let ec = Ec::new(t);
+        let curve = CurveInput {
+            temps: vec![50, 55],
+            duties: vec![192, 192],
+        };
+        // 499 < MIN_BASELINE_RPM(500)
+        assert!(
+            write_curve(
+                &ec,
+                &FixedRpm(MIN_BASELINE_RPM - 1),
+                CPU_TEMP_BLOCK,
+                CPU_DUTY_BLOCK,
+                &curve,
+            )
+            .is_err()
+        );
+        // 500 == 下限，允许
+        assert!(
+            write_curve(
+                &ec,
+                &FixedRpm(MIN_BASELINE_RPM),
+                CPU_TEMP_BLOCK,
+                CPU_DUTY_BLOCK,
+                &curve,
+            )
+            .is_ok()
+        );
+    }
+
+    // 复审 #2：地址白名单
+    #[test]
+    fn rejects_unauthorized_block_pairs() {
+        // GPU 对（已测但未行为级验证）与随机地址都必须拒绝
+        assert!(validate_blocks(CPU_TEMP_BLOCK, CPU_DUTY_BLOCK).is_ok());
+        assert!(validate_blocks(GPU_TEMP_BLOCK, GPU_DUTY_BLOCK).is_err());
+        assert!(validate_blocks(0x0F10, 0x0F30).is_err());
+        assert!(validate_blocks(0x0730, 0x0751).is_err());
+    }
+
+    #[test]
+    fn write_curve_rejects_unauthorized_blocks_before_touching_hardware() {
+        let t = MockTransport::new();
+        seed_real_blocks(&t);
+        let ec = Ec::new(t.clone());
+        let curve = CurveInput {
+            temps: vec![50, 55],
+            duties: vec![192, 192],
+        };
+        let err = write_curve(&ec, &FixedRpm(5000), GPU_TEMP_BLOCK, GPU_DUTY_BLOCK, &curve)
+            .expect_err("未授权表对必须拒绝");
+        assert!(err.to_string().contains("不是已授权的可写曲线表"));
+        // 硬件完全未被触碰（未 seed 的 GPU 区仍是 0）
+        assert_eq!(t.read_ec(GPU_TEMP_BLOCK).unwrap(), 0);
+    }
+
+    // 短曲线：必须如实报告尾部保留的格数（复审 #3）
+    #[test]
+    fn short_curve_reports_untouched_cells() {
+        let t = MockTransport::new();
+        seed_real_blocks(&t);
+        let ec = Ec::new(t);
+        let curve = CurveInput {
+            temps: vec![50, 55, 60],
+            duties: vec![192, 196, 200],
+        };
+        let report = write_curve(&ec, &FixedRpm(5000), CPU_TEMP_BLOCK, CPU_DUTY_BLOCK, &curve)
+            .expect("短曲线合法，应写入");
+        assert_eq!(report.cells_written, 6);
+        assert_eq!(report.untouched_cells, (16 - 3) * 2, "尾部 13*2 格保留原值");
     }
 
     // F-5 停转触发回滚
@@ -542,8 +712,8 @@ mod write_tests {
         let err = write_curve(&ec, &monitor, CPU_TEMP_BLOCK, CPU_DUTY_BLOCK, &curve)
             .expect_err("RPM 跌破 30% 基线必须回滚");
         assert!(err.to_string().contains("RPM"), "错误信息应含 RPM 上下文");
-        // 回滚断言
-        assert_eq!(t.read_ec(CPU_TEMP_BLOCK).unwrap(), 54);
+        // 回滚断言（经 ec 副本断言 —— 外层句柄读不到 ec 的写入，恒真无效）
+        assert_eq!(ec.read(CPU_TEMP_BLOCK).unwrap(), 54);
     }
 
     // F-7（存档 SHA256 校验在 app 层 profiles 侧实现，见 §19.4 第 7 条；core 侧先覆盖

@@ -301,9 +301,25 @@ pnputil.exe /scan-devices</pre>
             <p class="hint">正在从 EC 读取曲线表…</p>
           </div>
           <div class="panel-actions">
-            <span class="hint" id="curve-note">只读展示。官方只保存表名（如 M1T1），曲线数值不在本机备份里，因此这里的配对是**按数据特征推测**的。</span>
+            <span class="hint" id="curve-note">曲线已验证为本机生效表（2026-10-25 行为级验证：占空比 -7% → RPM -7.1%，回滚完整）。写入前请务必确认数值，写入失败会自动回滚。</span>
             <div class="spacer"></div>
             <button class="btn subtle" id="reload-curves">重新读取</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>自定义 CPU 曲线</h2><span class="panel-meta">写入 EC 0x0F00/0x0F20 · 高风险，失败自动回滚</span></div>
+          <div class="curve-form" id="curve-form">
+            <label>温度点（°C，逗号分隔，单调不减）
+              <input type="text" id="curve-temps" placeholder="54, 59, 63, 66, 69, 72, 75, 78, 81" />
+            </label>
+            <label>占空比（EC 值 64-255，逗号分隔，与温度点等长）
+              <input type="text" id="curve-duties" placeholder="192, 192, 196, 196, 196, 196, 196, 196, 200" />
+            </label>
+            <div class="panel-actions">
+              <span class="hint" id="curve-write-status"></span>
+              <div class="spacer"></div>
+              <button class="btn" id="apply-curve">写入 CPU 曲线</button>
+            </div>
           </div>
         </div>
       </section>

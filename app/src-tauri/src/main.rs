@@ -13,7 +13,7 @@ use mechrevo_core::{
     FanBoostChange, ModeChange, ModeController, OperatingMode, PowerController, PowerLimits,
     Sensors,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tauri::State;
 
@@ -573,6 +573,70 @@ struct RegReading {
 /// 寄存器浏览器一次最多读多少地址（防止界面被刷爆、也避免长占 EC）.
 const MAX_REGISTER_QUERY: usize = 64;
 
+/// 写入一条风扇曲线（T-040-04；指南 §19.4 方案 2）.
+///
+/// 安全链：validate → snapshot → RAII guard → 逐格有界重试写 →
+/// 每格后 RPM 停转监视（<基线 30% 立即回滚）→ 0xFF 填充格不碰。
+#[derive(Deserialize)]
+struct SetFanCurveArgs {
+    /// 温度点表基址（如 0x0F00）.
+    temp_block: u16,
+    /// 占空比表基址（如 0x0F20）.
+    duty_block: u16,
+    /// 温度点 °C（单调不减）.
+    temps: Vec<u8>,
+    /// 占空比 EC 尺度 0-255（全部 ≥ 64）.
+    duties: Vec<u8>,
+}
+
+/// 用 `Sensors` 作停转监视（CPU 风扇 RPM）.
+struct CpuRpmMonitor<'a, T: mechrevo_core::ec::EcTransport> {
+    sensors: &'a Sensors<'a, T>,
+}
+
+impl<T: mechrevo_core::ec::EcTransport> mechrevo_core::fancurve::RpmMonitor
+    for CpuRpmMonitor<'_, T>
+{
+    fn rpm(&self) -> mechrevo_core::error::Result<u16> {
+        self.sensors.cpu_fan_rpm()
+    }
+}
+
+/// 写风扇曲线（同步业务体）.
+fn set_fan_curve_now(state: &AppState, args: &SetFanCurveArgs) -> Result<String, String> {
+    // 复审 #2：地址白名单必须落在后端 —— 前端写死不能替代 IPC 层校验
+    mechrevo_core::fancurve::validate_blocks(args.temp_block, args.duty_block)
+        .map_err(|e| e.to_string())?;
+    let _guard = lock_ec(state).map_err(|(_, message)| message)?;
+    let ec = open_ec().map_err(|e| e.to_string())?;
+    let curve = mechrevo_core::fancurve::CurveInput {
+        temps: args.temps.clone(),
+        duties: args.duties.clone(),
+    };
+    let sensors = Sensors::new(&ec);
+    let monitor = CpuRpmMonitor { sensors: &sensors };
+    let report = mechrevo_core::fancurve::write_curve(
+        &ec,
+        &monitor,
+        args.temp_block,
+        args.duty_block,
+        &curve,
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(format!(
+        "曲线已写入：{} 格成功，无回滚{}",
+        report.cells_written,
+        if report.untouched_cells > 0 {
+            format!(
+                "；另有 {} 格保留原值（曲线点数少于 16）",
+                report.untouched_cells
+            )
+        } else {
+            String::new()
+        }
+    ))
+}
+
 /// 开关强冷（同步业务体）.
 fn set_fan_boost_now(state: &AppState, enabled: bool) -> Result<String, String> {
     let _guard = lock_ec(state).map_err(|(_, message)| message)?;
@@ -1050,6 +1114,31 @@ async fn apply_profile(state: SharedState<'_>, name: String) -> Result<String, S
     result
 }
 
+/// 写入一条风扇曲线（高风险：二次确认由前端负责；后端强制校验+回滚）.
+#[tauri::command]
+async fn set_fan_curve(
+    state: SharedState<'_>,
+    temp_block: u16,
+    duty_block: u16,
+    temps: Vec<u8>,
+    duties: Vec<u8>,
+) -> Result<String, String> {
+    let worker = Arc::clone(state.inner());
+    let recorder = Arc::clone(state.inner());
+    let generation = next_generation(state.inner());
+    let args = SetFanCurveArgs {
+        temp_block,
+        duty_block,
+        temps,
+        duties,
+    };
+    let result = tauri::async_runtime::spawn_blocking(move || set_fan_curve_now(&worker, &args))
+        .await
+        .map_err(join_error)?;
+    note_result(&recorder, "set_fan_curve", generation, &result);
+    result
+}
+
 /// 读风扇曲线（只读）.
 #[tauri::command]
 async fn get_fan_curves(state: SharedState<'_>) -> Result<FanCurvesDto, String> {
@@ -1092,6 +1181,7 @@ fn main() {
             delete_profile,
             apply_profile,
             get_fan_curves,
+            set_fan_curve,
             relaunch_elevated
         ])
         .run(tauri::generate_context!())

@@ -60,6 +60,10 @@ const BACKEND_COMMANDS: &[(&str, &[&str])] = &[
     ("delete_profile", &["name"]),
     ("apply_profile", &["name"]),
     ("get_fan_curves", &[]),
+    (
+        "set_fan_curve",
+        &["tempBlock", "dutyBlock", "temps", "duties"],
+    ),
     ("relaunch_elevated", &[]),
 ];
 
@@ -82,6 +86,10 @@ const FRONTEND_CONTRACT: &[(&str, &[&str])] = &[
     ("delete_profile", &["name"]),
     ("apply_profile", &["name"]),
     ("get_fan_curves", &[]),
+    (
+        "set_fan_curve",
+        &["tempBlock", "dutyBlock", "temps", "duties"],
+    ),
     ("relaunch_elevated", &[]),
 ];
 

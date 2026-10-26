@@ -1738,7 +1738,7 @@ dependencies = [
 
 [[package]]
 name = "mechrevo-core"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "log",
  "serde",
@@ -1748,7 +1748,7 @@ dependencies = [
 
 [[package]]
 name = "mechrevo-max"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "log",
  "mechrevo-core",

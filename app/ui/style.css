@@ -263,11 +263,11 @@ body[data-busy="true"] .btn { pointer-events: none; opacity: .6; }
 .profile-form { display: flex; gap: var(--gap-sm); align-items: flex-end; flex-wrap: wrap; }
 .field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 240px; }
 .field > span { font-size: 11px; color: var(--text-faint); }
-.field input, .reg-form input {
+.field input, .reg-form input, .curve-form input {
   background: oklch(14% 0.012 200); border: 1px solid var(--line); border-radius: var(--radius-sm);
   color: var(--text); padding: 8px 11px; font-size: 13px; font-family: var(--font);
 }
-.field input:focus-visible, .reg-form input:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 1px; }
+.field input:focus-visible, .reg-form input:focus-visible, .curve-form input:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 1px; }
 .profile-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
 .profile-list .empty { font-size: 12px; color: var(--text-faint); }
 .profile-item { display: flex; align-items: center; justify-content: space-between; gap: var(--gap);
@@ -331,3 +331,7 @@ body[data-busy="true"] .btn { pointer-events: none; opacity: .6; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+.curve-form { display: flex; flex-direction: column; gap: var(--gap-sm); margin-top: var(--gap-sm); }
+.curve-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text-dim); }
+.curve-form input { font-family: var(--mono); font-size: 12.5px; }

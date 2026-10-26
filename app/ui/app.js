@@ -22,6 +22,7 @@ const IPC = {
   deleteProfile: 'delete_profile',
   applyProfile: 'apply_profile',
   getFanCurves: 'get_fan_curves',
+  setFanCurve: 'set_fan_curve',
   relaunchElevated: 'relaunch_elevated',
 };
 
@@ -126,6 +127,10 @@ const ui = {
   curveBody: el('curve-body'),
   curveMeta: el('curve-meta'),
   reloadCurves: el('reload-curves'),
+  curveTemps: el('curve-temps'),
+  curveDuties: el('curve-duties'),
+  applyCurve: el('apply-curve'),
+  curveWriteStatus: el('curve-write-status'),
   regAddrs: el('reg-addrs'),
   readRegs: el('read-regs'),
   exportRegs: el('export-regs'),
@@ -602,6 +607,66 @@ async function refresh(force = false) {
 
 // ---------- 动作 ----------
 
+/// 解析曲线输入（逗号分隔的整数），并做与后端一致的本地预校验.
+function parseCurveInput() {
+  const parse = (text, label) => {
+    const out = (text || '').split(/[\s,]+/).filter(Boolean).map((s) => {
+      const n = Number(s);
+      if (!Number.isInteger(n) || n < 0 || n > 255) throw new Error(label + ' 含非法值: ' + s + '（需 0-255 整数）');
+      return n;
+    });
+    return out;
+  };
+  const temps = parse(ui.curveTemps.value, '温度点');
+  const duties = parse(ui.curveDuties.value, '占空比');
+  if (temps.length !== duties.length) throw new Error('温度点数 ' + temps.length + ' 与占空比点数 ' + duties.length + ' 不等');
+  if (!temps.length) throw new Error('曲线不能为空');
+  if (temps.length > 16) throw new Error('曲线最多 16 个点');
+  for (let i = 0; i < temps.length; i += 1) {
+    if (temps[i] < 20 || temps[i] > 110) throw new Error('第 ' + i + ' 点温度 ' + temps[i] + '°C 超出 20-110');
+    if (i > 0 && temps[i] < temps[i - 1]) throw new Error('温度点必须单调不减（第 ' + i + ' 点 ' + temps[i] + ' < ' + temps[i - 1] + '）');
+    if (duties[i] < 64) throw new Error('第 ' + i + ' 点占空比 ' + duties[i] + ' 低于安全下界 64');
+  }
+  return { temps, duties };
+}
+
+async function doApplyCurve() {
+  let args;
+  try {
+    args = parseCurveInput();
+  } catch (e) {
+    ui.curveWriteStatus.textContent = '输入错误：' + e.message;
+    return;
+  }
+  const summary = '温度 ' + args.temps.join('/') + ' °C\n占空比 ' + args.duties.join('/') +
+    '\n\n共 ' + args.temps.length + ' 个点；未填写的格子保留 EC 内原值。' +
+    '\n写入 EC 曲线表（CPU），写入期间风扇行为会临时改变。\n失败会尝试自动回滚。确定继续吗？';
+  if (!window.confirm(summary)) {
+    ui.curveWriteStatus.textContent = '已取消。';
+    return;
+  }
+  ui.applyCurve.disabled = true;
+  setBusy(true);
+  ui.curveWriteStatus.textContent = '写入中…（每格写后读回，转速异常会自动回滚）';
+  try {
+    const msg = await invoke(IPC.setFanCurve, {
+      tempBlock: 0x0F00,
+      dutyBlock: 0x0F20,
+      temps: args.temps,
+      duties: args.duties,
+    });
+    ui.curveWriteStatus.textContent = msg;
+    await loadCurves(true);
+  } catch (e) {
+    // 复审 #4：不得无条件宣称"已自动回滚" —— 回滚失败只落日志，前端无从得知
+    ui.curveWriteStatus.textContent = '写入失败，已尝试自动回滚（若日志显示回滚失败，请重启应用）：' + e;
+    await loadCurves(true);
+  } finally {
+    ui.applyCurve.disabled = false;
+    setBusy(false);
+  }
+}
+
 async function doSwitchMode(mode) {
   if (!window.confirm('切换档位会写入 EC 的档位寄存器，可能改变风扇和功耗行为。确定继续吗？')) return;
   setBusy(true);
@@ -1059,6 +1124,7 @@ ui.readRegs.addEventListener('click', doReadRegs);
 ui.exportRegs.addEventListener('click', doExportRegs);
 ui.regAddrs.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') doReadRegs(); });
 ui.reloadCurves.addEventListener('click', () => loadCurves(true));
+ui.applyCurve.addEventListener('click', doApplyCurve);
 
 ui.relaunch.addEventListener('click', async () => {
   setBusy(true);

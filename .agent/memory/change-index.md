@@ -59,3 +59,6 @@
 | `docs/VERIFICATION-LEDGER.md` | 44/8/4 测试数与新覆盖项 |
 | `.gitignore` | 增 `graft/` |
 | 删除 | 空目录 `protocol/`、`test/` |
+| 2026-10-25 | core/src/fancurve.rs | +写会话(validate/write_curve/pad_to_block/write_settled/RpmMonitor) | 83bf78a |
+| 2026-10-25 | core/src/ec/transport.rs | MockTransport 手写 Clone | 83bf78a |
+| 2026-10-25 | evidence/fan-dump-20261025.json | V-1 只读重扫 96 字节,与基线 0 diff | 83bf78a |

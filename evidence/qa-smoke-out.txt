@@ -1,0 +1,177 @@
+[qa] browser launched
+[qa] init injected
+[qa] page loaded
+[qa] ready
+{
+  "total": 33,
+  "passed": 33,
+  "failed": [],
+  "errors": [],
+  "results": [
+    {
+      "name": "启动默认概览",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "8 个仪表渲染",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "版本已显示",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "日志目录已显示",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "曲线自动加载",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "曲线两张图与坐标轴",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EC 不可用时 CPU 仪表仍有值",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EC 不可用时免驱内存仍有值",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EC 不可用时 EC 温度降级",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "无电池状态明确",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "无电池电量显示未知而非 0",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "未知 GPU 显示未知",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "未知内存显示未知",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "曲线失败明确提示重试",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "曲线失败退避不重复调用",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "失败可恢复按钮可用",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "导航到高级页",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "滑块范围来自后端",
+      "pass": true,
+      "detail": "5/200"
+    },
+    {
+      "name": "取消切档不会发 IPC",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "确认切档才发 IPC",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "慢速查询失败显示缓存提示",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "部分 EC 失败常驻提示",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "部分失败下一轮正常后清除",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "配置损坏明确提示",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "配置损坏不伪报空列表",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "损坏配置提供恢复入口",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "确认后从备份恢复",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "恢复后显示恢复的配置",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "曲线写入拒绝低于安全下界的占空比",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "非法输入不发 IPC",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "曲线写入拒绝非单调温度",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "取消曲线写入不发 IPC",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "确认曲线写入才发 IPC 且参数正确",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}
